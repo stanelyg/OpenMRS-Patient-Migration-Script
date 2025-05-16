@@ -18,7 +18,7 @@ This Python script facilitates the automated migration of DREAMS client enrollme
 
 - Ensures all uuid fields are generated dynamically.
 ## Project Structure
-- ├── migrate_patients.py  
+- ├── main.py  
 - └── README.md           
 
 ## Prerequisites
@@ -27,8 +27,8 @@ This Python script facilitates the automated migration of DREAMS client enrollme
 - OpenMRS database schema already initialized
 ## Installation
 ```bash
-  git clone https://github.com/your-username/openmrs-patient-migration.git
-  cd openmrs-patient-migration
+  git clone https://github.com/stanelyg/OpenMRS-Patient-Migration-Script.git
+  cd openmrs-patient-migration-script
 ```
 ## Create a virtual environment
 ```bash
