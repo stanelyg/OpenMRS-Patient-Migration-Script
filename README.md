@@ -28,7 +28,7 @@ This Python script facilitates the automated migration of DREAMS client enrollme
 ## Installation
 ```bash
   git clone https://github.com/stanelyg/OpenMRS-Patient-Migration-Script.git
-  cd openmrs-patient-migration-script
+  cd Openmrs-Patient-Migration-Script
 ```
 ## Create a virtual environment
 ```bash
