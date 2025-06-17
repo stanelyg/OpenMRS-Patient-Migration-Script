@@ -51,6 +51,14 @@ def get_person_and_encounter(cursor, client_id):
     encounter_row = cursor.fetchone()
     encounter_id = encounter_row[0] if encounter_row else None
     return patient_id, patient_id, encounter_id
+def cast_to_number(value):
+    try:
+        num = float(value)
+        if num.is_integer():
+            return int(num)  # cast to int if it's a whole number
+        return num  # keep as float
+    except (ValueError, TypeError):
+        return value  # return original if not a number
 
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
@@ -98,7 +106,7 @@ def main():
     periodresponse_map = load_value_map(cursor, "DreamsApp_periodresponse_mapping")
     lifewish_map = load_value_map(cursor, "DreamsApp_lifewish_mapping")   
 
-    df = pd.read_csv("Edu_Emp.csv")
+    df = pd.read_csv("csvs/Edu_Emp.csv")
 
     for _, row in df.iterrows():
         client_id = row["client_id"]
@@ -108,7 +116,7 @@ def main():
             continue
 
         for field, config in concept_map.items():
-            value = row.get(field)            
+            value = cast_to_number(row.get(field))          
             if config["type"] == "coded":
                 if field == "currently_in_school_id":
                     value = categorical_map.get(str(value))

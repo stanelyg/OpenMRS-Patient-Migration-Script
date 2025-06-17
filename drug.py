@@ -97,7 +97,7 @@ def main():
             continue
 
         for field, config in concept_map.items():
-            value = row.get(field)
+            value = cast_to_number(row.get(field))  
             if config["type"] == "coded":
                 if field == "used_alcohol_last_12months_id":
                     value = categorical_map.get(str(value))

@@ -56,6 +56,14 @@ def get_person_and_encounter(cursor, client_id):
     encounter_id = encounter_row[0] if encounter_row else None
     return patient_id, patient_id, encounter_id
 
+def cast_to_number(value):
+    try:
+        num = float(value)
+        if num.is_integer():
+            return int(num)
+        return num
+    except (ValueError, TypeError):
+        return value
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
     if value is None or value == "":
@@ -101,7 +109,7 @@ def main():
     ext_org_map = load_value_map(cursor, "dreamsapp_externalorganisation")
     
 
-    df = pd.read_csv("enrolment_data.csv")
+    df = pd.read_csv("csvs/enrolment_data.csv")
 
     for _, row in df.iterrows():
         client_id = row["client_id"]
@@ -111,7 +119,7 @@ def main():
             continue
 
         for field, config in concept_map.items():
-            value = row.get(field)            
+            value = cast_to_number(row.get(field))            
             if config["type"] == "coded":
                 if field == "implementing_partner_id":
                     value = ip_map.get(str(value))
@@ -127,7 +135,7 @@ def main():
                     value = ward_map.get(str(value))
                 elif field == "external_organisation_id":
                     value = ext_org_map.get(str(value))  
-            insert_obs(cursor, person_id[0], encounter_id, config["concept_id"], value, config["type"], field)
+            insert_obs(cursor, person_id[0], encounter_id, config["concept_id"], cast_to_number(value), config["type"], field)
     conn.commit()
     conn.close()
     print("Data successfully migrated to obs.")

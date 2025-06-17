@@ -103,7 +103,7 @@ def main():
             continue
 
         for field, config in concept_map.items():
-            value = row.get(field)            
+            value = cast_to_number(row.get(field))             
             if config["type"] == "coded":
                 if field == "ever_tested_for_hiv_id":
                     value = categorical_map.get(str(value))

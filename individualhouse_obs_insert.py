@@ -110,7 +110,7 @@ def main():
     disabilitytype_map = load_value_map(cursor, "dreamsapp_disabilitytype")
     
 
-    df = pd.read_csv("house_hold.csv")
+    df = pd.read_csv("csvs/house_hold.csv")
 
     for _, row in df.iterrows():
         client_id = row["client_id"]
@@ -120,7 +120,7 @@ def main():
             continue
 
         for field, config in concept_map.items():
-            value = row.get(field)            
+            value = cast_to_number(row.get(field))            
             if config["type"] == "coded":
                 if field == "head_of_household_id":
                     value = householdhead_map.get(str(value))
@@ -148,7 +148,6 @@ def main():
                     value = categorical_map.get(str(value))
                 elif field == "currently_in_ct_program_id":
                     value = categorical_map.get(str(value))
-               
             insert_obs(cursor, person_id[0], encounter_id, config["concept_id"], cast_to_number(value), config["type"], field)
     conn.commit()
     conn.close()
