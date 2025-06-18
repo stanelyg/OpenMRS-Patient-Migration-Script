@@ -45,8 +45,8 @@ def insert_encounters():
     # Get data from joined table that includes visit_id and patient_id
     src_cursor.execute("""
         SELECT cvf.patient_id, cvf.date_started, pvm.visit_id
-        FROM client_visits_flat cvf
-        JOIN dreams_production.patient_visits_mapping pvm
+        FROM enrollement_visits_flat cvf
+        JOIN dreams_production.dreams_patient_visits_mapping pvm
         ON cvf.patient_id = pvm.patient_id WHERE cvf.patient_id !=34378
         """)
     records = src_cursor.fetchall()
@@ -74,6 +74,22 @@ def insert_encounters():
             uuid_val
         ))
         encounter_id = dest_cursor.lastrowid
+        # insert the encounter provider 
+        dest_cursor.execute("""
+            INSERT INTO encounter_provider (
+                encounter_id, provider_id, encounter_role_id,
+                creator, date_created, uuid
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+            encounter_id,
+            1,
+            1,
+            1,              # creator
+            now,
+            str(uuid.uuid4())
+        ))
+
         # Log into dreams_production.patient_encounter_mapping
         dest_cursor.execute("""
             INSERT INTO patient_encounter_mapping (patient_id, encounter_id)

@@ -33,7 +33,7 @@ def create_visits_from_flat():
     now = datetime.now()
 
     # Load visits from client_visits_flat which already has patient_id
-    src_cursor.execute("SELECT * FROM client_visits_flat")
+    src_cursor.execute("SELECT * FROM enrollement_visits_flat")
     visits = src_cursor.fetchall()
 
     for visit in visits:
