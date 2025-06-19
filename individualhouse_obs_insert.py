@@ -4,19 +4,21 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+
 SOURCE_DB_CONFIG = {
-    'host': os.getenv('SOURCE_DB_HOST'),
-    'user': os.getenv('SOURCE_DB_USER'),
-    'password': os.getenv('SOURCE_DB_PASSWORD'),
-    'database': os.getenv('SOURCE_DB_NAME')
+    'host': 'localhost',
+    'user':'root',
+    'password': 'test',
+    'database': 'dreams_production'
 }
 
 DEST_DB_CONFIG = {
-    'host': os.getenv('DEST_DB_HOST'),
-    'user': os.getenv('DEST_DB_USER'),
-    'password': os.getenv('DEST_DB_PASSWORD'),
-    'database': os.getenv('DEST_DB_NAME')
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'test',
+    'database': 'openmrs'
 }
+
 
 concept_map = {
     "head_of_household_id": {"concept_id": 1000686, "type": "coded"},

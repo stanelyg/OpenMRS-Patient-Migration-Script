@@ -35,7 +35,7 @@ def migrate_patients():
     source_cursor = source_conn.cursor(dictionary=True)
     dest_cursor = dest_conn.cursor()
 
-    source_cursor.execute("SELECT * FROM client_flat where client_id !=2") 
+    source_cursor.execute("SELECT * FROM client_flat where client_id =2") 
     patients = source_cursor.fetchall()
     for row in patients:
         now = datetime.now()
