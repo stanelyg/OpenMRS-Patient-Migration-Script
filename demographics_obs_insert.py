@@ -49,20 +49,31 @@ concept_map = {
 # Load ID-to-concept mappings from lookup tables
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
-    return {str(row[0]): row[1] for row in cursor.fetchall()}
+    return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
 
 
 def get_person_and_encounter(cursor,client_id):
-    cursor.execute("SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s", (client_id,))
+    cursor.execute("""
+        SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s
+    """, (client_id,))
     row = cursor.fetchone()
-    if not row:
+    if not row or 'patient_id' not in row:
+        print(f"Missing patient_id for client_id {client_id}")
         return None, None, None
-    else:
-        patient_id = row['patient_id']  
-        cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s",  (patient_id,))
-        encounter_row = cursor.fetchone()
-        encounter_id = encounter_id = encounter_row['encounter_id'] if encounter_row else None
-        return patient_id, patient_id, encounter_id
+
+    patient_id = row['patient_id']
+
+    cursor.execute("""
+        SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s
+    """, (patient_id,))
+    encounter_row = cursor.fetchone()
+
+    if not encounter_row or 'encounter_id' not in encounter_row:
+        print(f"Missing encounter for patient_id {patient_id}")
+        return patient_id, patient_id, None
+
+    encounter_id = encounter_row['encounter_id']
+    return patient_id, patient_id, encounter_id
 
 def cast_to_number(value):
     try:
@@ -110,7 +121,7 @@ def main():
     src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
     dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
     src_cursor = src_conn.cursor(dictionary=True)
-    dest_cursor = dest_conn.cursor()
+    dest_cursor = dest_conn.cursor(dictionary=True)
 
     # Load mapping tables
     ip_map = load_value_map(dest_cursor, "dreamsapp_implementingpartner")
@@ -122,7 +133,7 @@ def main():
     ext_org_map = load_value_map(dest_cursor, "dreamsapp_externalorganisation")
 
     # Read source data
-    src_cursor.execute("SELECT * FROM tbl_m_demographics")
+    src_cursor.execute("SELECT * FROM tbl_m_demographics order by client_id limit 10")
     for row in src_cursor.fetchall():
         client_id = row["client_id"]       
         person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor,client_id)
