@@ -4,13 +4,20 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 import os
-DB_CONFIG = {
+
+SOURCE_DB_CONFIG = {
+    'host': os.getenv('SOURCE_DB_HOST'),
+    'user': os.getenv('SOURCE_DB_USER'),
+    'password': os.getenv('SOURCE_DB_PASSWORD'),
+    'database': os.getenv('SOURCE_DB_NAME')
+}
+
+DEST_DB_CONFIG = {
     'host': os.getenv('DEST_DB_HOST'),
     'user': os.getenv('DEST_DB_USER'),
     'password': os.getenv('DEST_DB_PASSWORD'),
     'database': os.getenv('DEST_DB_NAME')
 }
-
 
 concept_map = {
     "implementing_partner_id": {"concept_id": 1001343, "type": "coded"},
@@ -98,35 +105,38 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
 
 
 def main():
-    conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor()
-    ip_map = load_value_map(cursor, "dreamsapp_implementingpartner")
-    doc_ver_map = load_value_map(cursor, "DreamsApp_verificationdocument_mapping")
-    marital_status_map = load_value_map(cursor, "DreamsApp_maritalstatus_mapping")
-    county_map = load_value_map(cursor, "dreamsapp_county")
-    subcounty_map = load_value_map(cursor, "dreamsapp_subcounty")
-    ward_map = load_value_map(cursor, "dreamsapp_ward")
-    ext_org_map = load_value_map(cursor, "dreamsapp_externalorganisation")
-    
+    src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
+    dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
+    src_cursor = src_conn.cursor(dictionary=True)
+    dest_cursor = dest_conn.cursor()
 
-    df = pd.read_csv("csvs/enrolment_data.csv")
+    # Load mapping tables
+    ip_map = load_value_map(dest_cursor, "dreamsapp_implementingpartner")
+    doc_ver_map = load_value_map(dest_cursor, "DreamsApp_verificationdocument_mapping")
+    marital_status_map = load_value_map(dest_cursor, "DreamsApp_maritalstatus_mapping")
+    county_map = load_value_map(dest_cursor, "dreamsapp_county")
+    subcounty_map = load_value_map(dest_cursor, "dreamsapp_subcounty")
+    ward_map = load_value_map(dest_cursor, "dreamsapp_ward")
+    ext_org_map = load_value_map(dest_cursor, "dreamsapp_externalorganisation")
 
-    for _, row in df.iterrows():
+    # Read source data
+    src_cursor.execute("SELECT * FROM tbl_m_demographics")
+    for row in src_cursor.fetchall():
         client_id = row["client_id"]
-        person_id, patient_id, encounter_id = get_person_and_encounter(cursor, client_id)
+        person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, client_id)
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
 
         for field, config in concept_map.items():
-            value = cast_to_number(row.get(field))            
+            value = cast_to_number(row.get(field))
             if config["type"] == "coded":
                 if field == "implementing_partner_id":
                     value = ip_map.get(str(value))
                 elif field == "verification_document_id":
-                    value=doc_ver_map.get(str(value))
+                    value = doc_ver_map.get(str(value))
                 elif field == "marital_status_id":
-                    value=marital_status_map.get(str(value))
+                    value = marital_status_map.get(str(value))
                 elif field == "county_of_residence_id":
                     value = county_map.get(str(value))
                 elif field == "sub_county_id":
@@ -134,11 +144,16 @@ def main():
                 elif field == "ward_id":
                     value = ward_map.get(str(value))
                 elif field == "external_organisation_id":
-                    value = ext_org_map.get(str(value))  
-            insert_obs(cursor, person_id[0], encounter_id, config["concept_id"], cast_to_number(value), config["type"], field)
-    conn.commit()
-    conn.close()
-    print("Data successfully migrated to obs.")
+                    value = ext_org_map.get(str(value))
+
+            insert_obs(dest_cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
+
+    dest_conn.commit()
+    src_cursor.close()
+    dest_cursor.close()
+    src_conn.close()
+    dest_conn.close()
+    print("✅ Data successfully migrated to `obs`.")
 
 if __name__ == "__main__":
     main()

@@ -45,8 +45,8 @@ def insert_encounters():
     # Get data from joined table that includes visit_id and patient_id
     src_cursor.execute("""
         SELECT cvf.patient_id, cvf.date_started, pvm.visit_id
-        FROM enrollement_visits_flat cvf
-        JOIN dreams_production.dreams_patient_visits_mapping pvm
+        FROM `client_visits_flat` cvf
+        JOIN dreams_production.patient_visits_mapping pvm
         ON cvf.patient_id = pvm.patient_id WHERE cvf.patient_id !=34378
         """)
     records = src_cursor.fetchall()
@@ -98,11 +98,11 @@ def insert_encounters():
 
         print(f"Inserted encounter for patient {patient_id} linked to visit {encounter_id}")
 
-    dest_conn.commit()
-    src_cursor.close()
-    dest_cursor.close()
-    source_conn.close()
-    dest_conn.close()
+    # dest_conn.commit()
+    # src_cursor.close()
+    # dest_cursor.close()
+    # source_conn.close()
+    # dest_conn.close()
 
 if __name__ == '__main__':
     insert_encounters()
