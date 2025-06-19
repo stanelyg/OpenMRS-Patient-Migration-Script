@@ -57,11 +57,12 @@ def get_person_and_encounter(cursor,client_id):
     row = cursor.fetchone()
     if not row:
         return None, None, None
-    patient_id = row['patient_id']  
-    cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s",  (patient_id,))
-    encounter_row = cursor.fetchone()
-    encounter_id = encounter_id = encounter_row['encounter_id'] if encounter_row else None
-    return patient_id, patient_id, encounter_id
+    else:
+        patient_id = row['patient_id']  
+        cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s",  (patient_id,))
+        encounter_row = cursor.fetchone()
+        encounter_id = encounter_id = encounter_row['encounter_id'] if encounter_row else None
+        return patient_id, patient_id, encounter_id
 
 def cast_to_number(value):
     try:
