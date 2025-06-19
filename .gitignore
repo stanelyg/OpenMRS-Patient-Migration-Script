@@ -2,4 +2,5 @@
 venv
 *.csv
 *.sql
-
+*.zip
+csvs

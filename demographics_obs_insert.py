@@ -52,15 +52,15 @@ def load_value_map(cursor, table_name):
     return {str(row[0]): row[1] for row in cursor.fetchall()}
 
 
-def get_person_and_encounter(cursor, client_id):
+def get_person_and_encounter(cursor,client_id):
     cursor.execute("SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s", (client_id,))
     row = cursor.fetchone()
     if not row:
         return None, None, None
-    patient_id = row
-    cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s", patient_id)
+    patient_id = row['patient_id']  
+    cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s",  (patient_id,))
     encounter_row = cursor.fetchone()
-    encounter_id = encounter_row[0] if encounter_row else None
+    encounter_id = encounter_id = encounter_row['encounter_id'] if encounter_row else None
     return patient_id, patient_id, encounter_id
 
 def cast_to_number(value):
@@ -73,6 +73,7 @@ def cast_to_number(value):
         return value
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
+    print(person_id,'-',encounter_id)
     if value is None or value == "":
         return
     obs_uuid = str(uuid.uuid4())
@@ -120,10 +121,10 @@ def main():
     ext_org_map = load_value_map(dest_cursor, "dreamsapp_externalorganisation")
 
     # Read source data
-    src_cursor.execute("SELECT * FROM tbl_m_demographics")
+    src_cursor.execute("SELECT * FROM tbl_m_demographics limit 10")
     for row in src_cursor.fetchall():
-        client_id = row["client_id"]
-        person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, client_id)
+        client_id = row["client_id"]       
+        person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor,client_id)
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
