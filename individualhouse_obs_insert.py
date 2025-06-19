@@ -4,17 +4,23 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 import os
-DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
-    'database': 'openmrs'
+SOURCE_DB_CONFIG = {
+    'host': os.getenv('SOURCE_DB_HOST'),
+    'user': os.getenv('SOURCE_DB_USER'),
+    'password': os.getenv('SOURCE_DB_PASSWORD'),
+    'database': os.getenv('SOURCE_DB_NAME')
 }
 
+DEST_DB_CONFIG = {
+    'host': os.getenv('DEST_DB_HOST'),
+    'user': os.getenv('DEST_DB_USER'),
+    'password': os.getenv('DEST_DB_PASSWORD'),
+    'database': os.getenv('DEST_DB_NAME')
+}
 
 concept_map = {
     "head_of_household_id": {"concept_id": 1000686, "type": "coded"},
-    "head_of_household_other": {"concept_id": 1001805, "type": "text"},
+    "head_of_household_other": {"concept_id": 1001707, "type": "text"},
     "age_of_household_head": {"concept_id": 1000673, "type": "numeric"},
     "is_father_alive": {"concept_id": 1000674, "type": "coded"},
     "is_mother_alive": {"concept_id": 1000675, "type": "coded"},
@@ -22,23 +28,24 @@ concept_map = {
     "main_floor_material_id": {"concept_id": 1000679, "type": "coded"},
     "main_floor_material_other": {"concept_id": 1000680, "type": "text"},
     "main_roof_material_id": {"concept_id": 1000685, "type": "coded"},
-    "main_roof_material_other": {"concept_id": 1001806, "type": "text"},
+    "main_roof_material_other": {"concept_id": 1001708, "type": "text"},
     "main_wall_material_id": {"concept_id": 1000691, "type": "coded"},
     "main_wall_material_other": {"concept_id": 1000692, "type": "text"},
     "source_of_drinking_water_id": {"concept_id": 1000698, "type": "coded"},
     "source_of_drinking_water_other": {"concept_id": 1000699, "type": "text"},
     "no_of_days_missed_food_in_4wks_id": {"concept_id": 1000700, "type": "coded"},
     "has_disability_id": {"concept_id": 164951, "type": "coded"},
-    "disabilitytype_id": {"concept_id": 1000638, "type": "coded"},
-    "disability_type_other": {"concept_id": 1001807, "type": "text"},
+    "disabilitytype_id": {"concept_id": 1001091, "type": "coded"},
+    "disability_type_other": {"concept_id": 1001709, "type": "text"},
     "no_of_people_in_household": {"concept_id": 1000705, "type": "numeric"},
     "no_of_females": {"concept_id": 1000706, "type": "numeric"},
     "no_of_males": {"concept_id": 1000707, "type": "numeric"},
     "no_of_children": {"concept_id": 1000709, "type": "numeric"},
     "ever_enrolled_in_ct_program_id": {"concept_id": 1000710, "type": "coded"},
-    "currently_in_ct_program_id": {"concept_id": 1001808, "type": "coded"},
-    "current_ct_program": {"concept_id": 1001809, "type": "text"},
+    "currently_in_ct_program_id": {"concept_id": 1001710, "type": "coded"},
+    "current_ct_program": {"concept_id": 1001711, "type": "text"},
 }
+
 
 
 # Load ID-to-concept mappings from lookup tables
@@ -99,22 +106,24 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
 
 
 def main():
-    conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor()
-    householdhead_map = load_value_map(cursor, "dreamsapp_householdhead")
-    categorical_map = load_value_map(cursor, "dreams_categorical_responses")
-    floormaterial_map = load_value_map(cursor, "dreamsapp_floormaterial")
-    roofingmaterial_map = load_value_map(cursor, "dreamsapp_roofingmaterial")
-    wallmaterial_map = load_value_map(cursor, "dreamsapp_wallmaterial")
-    drinkingwater_map = load_value_map(cursor, "dreamsapp_drinkingwater")
-    disabilitytype_map = load_value_map(cursor, "dreamsapp_disabilitytype")
+    src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
+    dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
+    src_cursor = src_conn.cursor(dictionary=True)
+    dest_cursor = dest_conn.cursor()
+    householdhead_map = load_value_map(dest_cursor, "DreamsApp_householdhead_mapping")
+    categorical_map = load_value_map(dest_cursor, "DreamsApp_categoricalresponse_mapping")
+    floormaterial_map = load_value_map(dest_cursor, "dreamsapp_floormaterial")
+    roofingmaterial_map = load_value_map(dest_cursor, "dreamsapp_roofingmaterial")
+    wallmaterial_map = load_value_map(dest_cursor, "dreamsapp_wallmaterial")
+    drinkingwater_map = load_value_map(dest_cursor, "dreamsapp_drinkingwater")
+    disabilitytype_map = load_value_map(dest_cursor, "dreamsapp_disabilitytype")
     
 
-    df = pd.read_csv("csvs/house_hold.csv")
-
-    for _, row in df.iterrows():
+    # Read source data
+    src_cursor.execute("SELECT * FROM tbl_m_demographics")
+    for row in src_cursor.fetchall():
         client_id = row["client_id"]
-        person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
+        person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
@@ -148,9 +157,12 @@ def main():
                     value = categorical_map.get(str(value))
                 elif field == "currently_in_ct_program_id":
                     value = categorical_map.get(str(value))
-            insert_obs(cursor, person_id[0], encounter_id, config["concept_id"], cast_to_number(value), config["type"], field)
-    conn.commit()
-    conn.close()
+            insert_obs(dest_cursor, person_id[0], encounter_id, config["concept_id"], cast_to_number(value), config["type"], field)
+    dest_conn.commit()
+    src_cursor.close()
+    dest_cursor.close()
+    src_conn.close()
+    dest_conn.close()
     print("Data successfully migrated to obs.")
 
 if __name__ == "__main__":

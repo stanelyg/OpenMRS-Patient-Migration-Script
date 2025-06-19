@@ -153,7 +153,7 @@ def main():
     dest_cursor.close()
     src_conn.close()
     dest_conn.close()
-    print("✅ Data successfully migrated to `obs`.")
+    print("Data successfully migrated to `obs`.")
 
 if __name__ == "__main__":
     main()
