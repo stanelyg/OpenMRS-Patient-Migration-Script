@@ -121,7 +121,7 @@ def main():
     ext_org_map = load_value_map(dest_cursor, "dreamsapp_externalorganisation")
 
     # Read source data
-    src_cursor.execute("SELECT * FROM tbl_m_demographics limit 10")
+    src_cursor.execute("SELECT * FROM tbl_m_demographics")
     for row in src_cursor.fetchall():
         client_id = row["client_id"]       
         person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor,client_id)
