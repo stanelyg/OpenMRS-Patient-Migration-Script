@@ -162,7 +162,7 @@ def main():
                     value = schoollevel_map.get(str(value))
                 elif field == "life_wish_id":
                     value = lifewish_map.get(str(value))               
-            insert_obs(dest_cursor, person_id[0], encounter_id, config["concept_id"], value, config["type"], field)
+            insert_obs(dest_cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
     dest_conn.commit()
     src_cursor.close()
     dest_cursor.close()

@@ -143,7 +143,7 @@ def main():
                 elif field == "reason_not_using_fp_id":
                     value = not_using_fp_map.get(str(value))
 
-            insert_obs(dest_cursor, person_id[0], encounter_id, config["concept_id"],value, config["type"], field)
+            insert_obs(dest_cursor, person_id, encounter_id, config["concept_id"],value, config["type"], field)
     dest_conn.commit()
     src_cursor.close()
     dest_cursor.close()
