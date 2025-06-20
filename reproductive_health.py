@@ -4,46 +4,64 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 import os
-DB_CONFIG = {
+SOURCE_DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user':'root',
+    'password': 'test',
+    'database': 'dreams_production'
+}
+
+DEST_DB_CONFIG = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 }
 
-
 concept_map = {
     "has_biological_children_id": {"concept_id": 1000806, "type": "coded"},
-    "no_of_biological_children": {"concept_id": 1000709, "type": "numeric"},
+    "no_of_biological_children": {"concept_id": 1000929, "type": "numeric"},
     "currently_pregnant_id": {"concept_id": 1000807, "type": "coded"},
-    "current_anc_enrollment_id": {"concept_id": 1000808, "type": "coded"},
+    "current_anc_enrollment_id": {"concept_id": 1001721, "type": "coded"},
     "anc_facility_name": {"concept_id": 1000809, "type": "text"},
     "fp_methods_awareness_id": {"concept_id": 1000810, "type": "coded"},
     "familyplanningmethod_id": {"concept_id": 1000817, "type": "coded"},
-    "known_fp_method_other": {"concept_id": 1001280, "type": "text"},
+    "known_fp_method_other": {"concept_id": 1001722, "type": "text"},
     "currently_use_modern_fp_id": {"concept_id": 1000819, "type": "coded"},
     "current_fp_method_id": {"concept_id": 1000820, "type": "coded"},
-    "current_fp_method_other": {"concept_id": 1001280, "type": "text"},
+    "current_fp_method_other": {"concept_id": 1001723, "type": "text"},
     "reason_not_using_fp_id": {"concept_id": 1000822, "type": "coded"},
-    "reason_not_using_fp_other": {"concept_id": 1001280, "type": "text"},
+    "reason_not_using_fp_other": {"concept_id": 1001724, "type": "text"}
 }
 
 
 # Load ID-to-concept mappings from lookup tables
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
-    return {str(row[0]): row[1] for row in cursor.fetchall()}
+    return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
 
 
-def get_person_and_encounter(cursor, client_id):
-    cursor.execute("SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s", (client_id,))
+def get_person_and_encounter(cursor,client_id):
+    cursor.execute("""
+        SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s
+    """, (client_id,))
     row = cursor.fetchone()
-    if not row:
+    if not row or 'patient_id' not in row:
+        print(f"Missing patient_id for client_id {client_id}")
         return None, None, None
-    patient_id = row
-    cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s", patient_id)
+
+    patient_id = row['patient_id']
+
+    cursor.execute("""
+        SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s
+    """, (patient_id,))
     encounter_row = cursor.fetchone()
-    encounter_id = encounter_row[0] if encounter_row else None
+
+    if not encounter_row or 'encounter_id' not in encounter_row:
+        print(f"Missing encounter for patient_id {patient_id}")
+        return patient_id, patient_id, None
+
+    encounter_id = encounter_row['encounter_id']
     return patient_id, patient_id, encounter_id
 
 def cast_to_number(value):
@@ -54,6 +72,7 @@ def cast_to_number(value):
         return num
     except (ValueError, TypeError):
         return value
+
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
     if value is None or value == "":
         return
@@ -87,23 +106,25 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
 
 
 def main():
-    conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor()
-    categorical_map = load_value_map(cursor, "dreams_categorical_responses")
-    not_using_fp_map = load_value_map(cursor, "DreamsApp_reasonnotusingfamilyplanning_mapping")
-    fp_method_map = load_value_map(cursor, "DreamsApp_familyplanningmethod_mapping")
- 
-    df = pd.read_csv("csvs/reproductive_health.csv")
+    src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
+    dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
+    src_cursor = src_conn.cursor(dictionary=True)
+    dest_cursor = dest_conn.cursor(dictionary=True)
 
-    for _, row in df.iterrows():
+    categorical_map = load_value_map(dest_cursor, "DreamsApp_categoricalresponse_mapping")
+    not_using_fp_map = load_value_map(dest_cursor, "DreamsApp_reasonnotusingfamilyplanning_mapping")
+    fp_method_map = load_value_map(dest_cursor, "DreamsApp_familyplanningmethod_mapping")
+ 
+    src_cursor.execute("SELECT * FROM tbl_m_reprohealth")
+    for row in src_cursor.fetchall():
         client_id = row["client_id"]
-        person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
+        person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
 
         for field, config in concept_map.items():
-            value = cast_to_number(row.get(field))  
+            value =row.get(field)  
             if config["type"] == "coded":
                 if field == "has_biological_children_id":
                     value = categorical_map.get(str(value))
@@ -122,10 +143,13 @@ def main():
                 elif field == "reason_not_using_fp_id":
                     value = not_using_fp_map.get(str(value))
 
-            insert_obs(cursor, person_id[0], encounter_id, config["concept_id"],cast_to_number(value), config["type"], field)
-    conn.commit()
-    conn.close()
-    print("Data successfully migrated to obs.")
+            insert_obs(dest_cursor, person_id[0], encounter_id, config["concept_id"],value, config["type"], field)
+    dest_conn.commit()
+    src_cursor.close()
+    dest_cursor.close()
+    src_conn.close()
+    dest_conn.close()
+    print(" Reproductive  health data Data successfully migrated to obs.")
 
 if __name__ == "__main__":
     main()

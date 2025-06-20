@@ -44,38 +44,41 @@ concept_map = {
     "no_of_males": {"concept_id": 1000707, "type": "numeric"},
     "no_of_children": {"concept_id": 1000709, "type": "numeric"},
     "ever_enrolled_in_ct_program_id": {"concept_id": 1000710, "type": "coded"},
-    "currently_in_ct_program_id": {"concept_id": 1001710, "type": "coded"},
+    "currently_in_ct_program_id": {"concept_id": 1001770, "type": "coded"},
     "current_ct_program": {"concept_id": 1001711, "type": "text"},
 }
-
-
 
 # Load ID-to-concept mappings from lookup tables
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
-    return {str(row[0]): row[1] for row in cursor.fetchall()}
+    return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
 
 
-def get_person_and_encounter(cursor, client_id):
-    cursor.execute("SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s", (client_id,))
+def get_person_and_encounter(cursor,client_id):
+    cursor.execute("""
+        SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s
+    """, (client_id,))
     row = cursor.fetchone()
-    if not row:
+    if not row or 'patient_id' not in row:
+        print(f"Missing patient_id for client_id {client_id}")
         return None, None, None
-    patient_id = row
-    cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s", patient_id)
+
+    patient_id = row['patient_id']
+
+    cursor.execute("""
+        SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s
+    """, (patient_id,))
     encounter_row = cursor.fetchone()
-    encounter_id = encounter_row[0] if encounter_row else None
+
+    if not encounter_row or 'encounter_id' not in encounter_row:
+        print(f"Missing encounter for patient_id {patient_id}")
+        return patient_id, patient_id, None
+
+    encounter_id = encounter_row['encounter_id']
     return patient_id, patient_id, encounter_id
-def cast_to_number(value):
-    try:
-        num = float(value)
-        if num.is_integer():
-            return int(num)  # cast to int if it's a whole number
-        return num  # keep as float
-    except (ValueError, TypeError):
-        return value  # return original if not a number
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
+    print(person_id,'-',encounter_id)
     if value is None or value == "":
         return
     obs_uuid = str(uuid.uuid4())
@@ -111,7 +114,8 @@ def main():
     src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
     dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
     src_cursor = src_conn.cursor(dictionary=True)
-    dest_cursor = dest_conn.cursor()
+    dest_cursor = dest_conn.cursor(dictionary=True)
+
     householdhead_map = load_value_map(dest_cursor, "DreamsApp_householdhead_mapping")
     categorical_map = load_value_map(dest_cursor, "DreamsApp_categoricalresponse_mapping")
     floormaterial_map = load_value_map(dest_cursor, "dreamsapp_floormaterial")
@@ -122,7 +126,7 @@ def main():
     
 
     # Read source data
-    src_cursor.execute("SELECT * FROM tbl_m_demographics")
+    src_cursor.execute("SELECT * FROM tbl_m_household")
     for row in src_cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))
@@ -131,7 +135,7 @@ def main():
             continue
 
         for field, config in concept_map.items():
-            value = cast_to_number(row.get(field))            
+            value = row.get(field)          
             if config["type"] == "coded":
                 if field == "head_of_household_id":
                     value = householdhead_map.get(str(value))
@@ -159,7 +163,7 @@ def main():
                     value = categorical_map.get(str(value))
                 elif field == "currently_in_ct_program_id":
                     value = categorical_map.get(str(value))
-            insert_obs(dest_cursor, person_id[0], encounter_id, config["concept_id"], cast_to_number(value), config["type"], field)
+            insert_obs(dest_cursor, person_id[0], encounter_id, config["concept_id"], value, config["type"], field)
     dest_conn.commit()
     src_cursor.close()
     dest_cursor.close()
