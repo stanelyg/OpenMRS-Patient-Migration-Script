@@ -123,7 +123,7 @@ def main():
     frequency_map = load_value_map(dest_cursor, "DreamsApp_frequencyresponse_mapping")
     gbvhelpprovider_map = load_value_map(dest_cursor, "DreamsApp_gbvhelpprovider_mapping")
  
-    src_cursor.execute("SELECT * FROM tbl_m_violence")
+    src_cursor.execute("SELECT * FROM tbl_m_violence where client_id <= 2689322")
     for row in src_cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))

@@ -129,7 +129,7 @@ def main():
     periodresponse_map = load_value_map(dest_cursor, "DreamsApp_periodresponse_mapping")
     lifewish_map = load_value_map(dest_cursor, "DreamsApp_lifewish_mapping")   
 
-    src_cursor.execute("SELECT * FROM tbl_m_edu_empl")
+    src_cursor.execute("SELECT * FROM tbl_m_edu_empl where client_id <= 2689322")
     for row in src_cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))

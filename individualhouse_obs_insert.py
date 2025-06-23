@@ -126,7 +126,7 @@ def main():
     
 
     # Read source data
-    src_cursor.execute("SELECT * FROM tbl_m_household")
+    src_cursor.execute("SELECT * FROM tbl_m_household where client_id <= 2689322")
     for row in src_cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))

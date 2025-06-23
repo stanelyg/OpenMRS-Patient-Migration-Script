@@ -117,7 +117,7 @@ def main():
     reasonnotinhivcare_map = load_value_map(dest_cursor, "DreamsApp_reasonnotinhivcare_mapping")
     reasonnottestedforhiv_map = load_value_map(dest_cursor, "DreamsApp_reasonnottestedforhiv_mapping")
 
-    src_cursor.execute("SELECT * FROM tbl_m_hivtesting")
+    src_cursor.execute("SELECT * FROM tbl_m_hivtesting where client_id <= 2689322")
     for row in src_cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))
