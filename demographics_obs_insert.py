@@ -36,7 +36,7 @@ concept_map = {
     "landmark": {"concept_id": 1000663, "type": "text"},
     "dreams_id": {"concept_id": 1000664, "type": "text"},
     "guardian_name": {"concept_id": 1000665, "type": "text"},
-    "relationship_with_guardian": {"concept_id": 1000666, "type": "text"},
+    "relationship_with_guardian": {"concept_id": 1001771, "type": "text"},
     "guardian_phone_number": {"concept_id": 1000667, "type": "text"},
     "guardian_national_id": {"concept_id": 1000668, "type": "text"},
     "external_organisation_id": {"concept_id": 1000669, "type": "coded"},
