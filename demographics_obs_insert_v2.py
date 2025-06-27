@@ -13,7 +13,7 @@ DB_CONFIG = {
     'database': 'openmrs'
 }
 
-BATCH_SIZE = 2000  # reduce to avoid large locks
+BATCH_SIZE = 2000
 NUM_WORKERS = cpu_count()
 MAX_RETRIES = 5
 RETRY_BACKOFF = (2, 6)  # seconds
@@ -47,7 +47,7 @@ concept_map = {
 def load_value_maps(cursor):
     def load_map(table):
         cursor.execute(f"SELECT id, concept_id FROM {table}")
-        return {str(row[0]): row[1] for row in cursor.fetchall()}
+        return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
 
     return {
         "implementing_partner_id": load_map("dreamsapp_implementingpartner"),
@@ -127,11 +127,10 @@ def _run_batch_logic(client_ids):
                 obs_uuid, person_id, config["concept_id"], encounter_id,
                 now, 1, value, 1, now, 0
             ))
-
             log_data.append((None, person_id, encounter_id, config["concept_id"], field, str(value)))
 
     if obs_data:
-        value_field = field_map[config["type"]]  # re-use last type seen
+        # Use the last seen value field from the final iteration (safe for homogeneous types)
         insert_query = f"""
             INSERT INTO obs (
                 uuid, person_id, concept_id, encounter_id, obs_datetime,
