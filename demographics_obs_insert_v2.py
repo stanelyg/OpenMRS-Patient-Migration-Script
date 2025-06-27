@@ -4,21 +4,14 @@ from datetime import datetime
 from multiprocessing import Pool, cpu_count
 
 # Configuration
-SOURCE_DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
-    'database': 'dreams_production'
-}
-
-DEST_DB_CONFIG = {
+DB_CONFIG = {
     'host': 'localhost',
     'user': 'root',
     'password': 'test',
     'database': 'openmrs'
 }
 
-BATCH_SIZE = 500  # Number of patients per process
+BATCH_SIZE = 10000
 NUM_WORKERS = cpu_count()
 
 concept_map = {
@@ -62,81 +55,91 @@ def load_value_maps(cursor):
         "external_organisation_id": load_map("dreamsapp_externalorganisation")
     }
 
-def get_person_and_encounter(cursor, client_id):
-    cursor.execute("SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s", (client_id,))
-    row = cursor.fetchone()
-    if not row:
-        return None, None, None
-    patient_id = row[0]
-    cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s", (patient_id,))
-    encounter = cursor.fetchone()
-    return patient_id, patient_id, encounter[0] if encounter else None
-
-def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
-    if value in (None, ""):
-        return
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    uuid_str = str(uuid.uuid4())
-    field_map = {
-        "coded": "value_coded",
-        "text": "value_text",
-        "date": "value_datetime",
-        "numeric": "value_numeric"
-    }
-    value_field = field_map.get(value_type)
-    if not value_field:
-        return
-
-    # Insert into obs
-    cursor.execute(f"""
-        INSERT INTO obs (
-            uuid, person_id, concept_id, encounter_id, obs_datetime, location_id,
-            {value_field}, creator, date_created, voided
-        )
-        VALUES (%s, %s, %s, %s, %s, 1, %s, 1, %s, 0)
-    """, (uuid_str, person_id, concept_id, encounter_id, now, value, now))
-
-    obs_id = cursor.lastrowid
-
-    # Log to obs_migration_log
-    cursor.execute("""
-        INSERT INTO obs_migration_log 
-        (obs_id, person_id, encounter_id, concept_id, field_name, value)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
-
 def process_batch(client_ids):
-    src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
-    dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
-    src_cursor = src_conn.cursor(dictionary=True)
-    dest_cursor = dest_conn.cursor()
-    value_maps = load_value_maps(dest_cursor)
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
+    value_maps = load_value_maps(cursor)
+
+    # Preload mappings for patient & encounter
+    format_strings = ','.join(['%s'] * len(client_ids))
+    cursor.execute(f"""
+        SELECT d.client_id, d.patient_id, p.encounter_id
+        FROM dreams_client_patient_mapping d
+        LEFT JOIN patient_encounter_mapping p ON d.patient_id = p.patient_id
+        WHERE d.client_id IN ({format_strings})
+    """, tuple(client_ids))
+    client_map = {row['client_id']: (row['patient_id'], row['encounter_id']) for row in cursor.fetchall()}
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    obs_data = []
+    log_data = []
 
     for client_id in client_ids:
-        src_cursor.execute("SELECT * FROM tbl_m_demographics WHERE client_id = %s", (client_id,))
-        row = src_cursor.fetchone()
-        if not row:
+        cursor.execute("SELECT * FROM tbl_m_demographics WHERE client_id = %s", (client_id,))
+        row = cursor.fetchone()
+        if not row or client_id not in client_map:
             continue
 
-        person_id, _, encounter_id = get_person_and_encounter(dest_cursor, client_id)
+        person_id, encounter_id = client_map[client_id]
         if not person_id or not encounter_id:
             continue
 
         for field, config in concept_map.items():
             value = row.get(field)
+            if value in (None, ""):
+                continue
+
             if config["type"] == "coded" and field in value_maps:
                 value = value_maps[field].get(str(value))
-            insert_obs(dest_cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
+                if not value:
+                    continue
 
-        dest_conn.commit()  # commit per patient
+            value_field_map = {
+                "coded": "value_coded",
+                "text": "value_text",
+                "date": "value_datetime",
+                "numeric": "value_numeric"
+            }
 
-    src_cursor.close()
-    dest_cursor.close()
-    src_conn.close()
-    dest_conn.close()
+            value_field = value_field_map.get(config["type"])
+            if not value_field:
+                continue
+
+            obs_uuid = str(uuid.uuid4())
+            obs_data.append((
+                obs_uuid, person_id, config["concept_id"], encounter_id,
+                now, 1, value, 1, now, 0
+            ))
+            log_data.append((None, person_id, encounter_id, config["concept_id"], field, str(value)))
+
+    if obs_data:
+        insert_query = f"""
+            INSERT INTO obs (
+                uuid, person_id, concept_id, encounter_id, obs_datetime,
+                location_id, {value_field}, creator, date_created, voided
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.executemany(insert_query, obs_data)
+
+        cursor.execute("SELECT LAST_INSERT_ID()")
+        start_id = cursor.fetchone()['LAST_INSERT_ID()']
+
+        for i in range(len(log_data)):
+            log_data[i] = (start_id + i,) + log_data[i][1:]
+
+        cursor.executemany("""
+            INSERT INTO obs_migration_log 
+            (obs_id, person_id, encounter_id, concept_id, field_name, value)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, log_data)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 def main():
-    conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
+    conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
     cursor.execute("SELECT client_id FROM tbl_m_demographics WHERE client_id <= 2689322")
     client_ids = [row[0] for row in cursor.fetchall()]
