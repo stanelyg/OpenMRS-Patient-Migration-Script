@@ -2,6 +2,8 @@ import mysql.connector
 import uuid
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
+import time
+import random
 
 # Configuration
 DB_CONFIG = {
@@ -11,8 +13,10 @@ DB_CONFIG = {
     'database': 'openmrs'
 }
 
-BATCH_SIZE = 10000
+BATCH_SIZE = 2000  # reduce to avoid large locks
 NUM_WORKERS = cpu_count()
+MAX_RETRIES = 5
+RETRY_BACKOFF = (2, 6)  # seconds
 
 concept_map = {
     "implementing_partner_id": {"concept_id": 1001343, "type": "coded"},
@@ -56,11 +60,25 @@ def load_value_maps(cursor):
     }
 
 def process_batch(client_ids):
+    for attempt in range(MAX_RETRIES):
+        try:
+            _run_batch_logic(client_ids)
+            return
+        except mysql.connector.Error as e:
+            if e.errno == 1205:
+                wait = random.uniform(*RETRY_BACKOFF)
+                print(f"[Batch Retry {attempt+1}] Lock timeout. Retrying in {wait:.1f}s...")
+                time.sleep(wait)
+            else:
+                raise
+    print(f"[Batch Failed] Gave up after {MAX_RETRIES} retries due to lock timeout.")
+
+def _run_batch_logic(client_ids):
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
+
     value_maps = load_value_maps(cursor)
 
-    # Preload mappings for patient & encounter
     format_strings = ','.join(['%s'] * len(client_ids))
     cursor.execute(f"""
         SELECT d.client_id, d.patient_id, p.encounter_id
@@ -94,14 +112,13 @@ def process_batch(client_ids):
                 if not value:
                     continue
 
-            value_field_map = {
+            field_map = {
                 "coded": "value_coded",
                 "text": "value_text",
                 "date": "value_datetime",
                 "numeric": "value_numeric"
             }
-
-            value_field = value_field_map.get(config["type"])
+            value_field = field_map.get(config["type"])
             if not value_field:
                 continue
 
@@ -110,9 +127,11 @@ def process_batch(client_ids):
                 obs_uuid, person_id, config["concept_id"], encounter_id,
                 now, 1, value, 1, now, 0
             ))
+
             log_data.append((None, person_id, encounter_id, config["concept_id"], field, str(value)))
 
     if obs_data:
+        value_field = field_map[config["type"]]  # re-use last type seen
         insert_query = f"""
             INSERT INTO obs (
                 uuid, person_id, concept_id, encounter_id, obs_datetime,
