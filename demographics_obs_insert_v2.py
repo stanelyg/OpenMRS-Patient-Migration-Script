@@ -127,10 +127,11 @@ def _run_batch_logic(client_ids):
                 obs_uuid, person_id, config["concept_id"], encounter_id,
                 now, 1, value, 1, now, 0
             ))
+
             log_data.append((None, person_id, encounter_id, config["concept_id"], field, str(value)))
 
     if obs_data:
-        # Use the last seen value field from the final iteration (safe for homogeneous types)
+        # Use the last value field seen — all rows in obs_data will use this field name
         insert_query = f"""
             INSERT INTO obs (
                 uuid, person_id, concept_id, encounter_id, obs_datetime,
