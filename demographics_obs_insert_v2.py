@@ -13,10 +13,12 @@ DB_CONFIG = {
     'database': 'openmrs'
 }
 
-BATCH_SIZE = 2000
+BATCH_SIZE = 100
 NUM_WORKERS = cpu_count()
 MAX_RETRIES = 5
-RETRY_BACKOFF = (2, 6)  # seconds
+RETRY_BACKOFF = (2, 6)
+
+LOG_EXTRA_FIELDS = True  # Toggle this to log more than obs_id
 
 concept_map = {
     "implementing_partner_id": {"concept_id": 1001343, "type": "coded"},
@@ -44,20 +46,9 @@ concept_map = {
     "nupi_no": {"concept_id": 1000672, "type": "text"}
 }
 
-def load_value_maps(cursor):
-    def load_map(table):
-        cursor.execute(f"SELECT id, concept_id FROM {table}")
-        return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
-
-    return {
-        "implementing_partner_id": load_map("dreamsapp_implementingpartner"),
-        "verification_document_id": load_map("DreamsApp_verificationdocument_mapping"),
-        "marital_status_id": load_map("DreamsApp_maritalstatus_mapping"),
-        "county_of_residence_id": load_map("dreamsapp_county"),
-        "sub_county_id": load_map("dreamsapp_subcounty"),
-        "ward_id": load_map("dreamsapp_ward"),
-        "external_organisation_id": load_map("dreamsapp_externalorganisation")
-    }
+def load_lookup_map(cursor, table):
+    cursor.execute(f"SELECT id, concept_id FROM {table}")
+    return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
 
 def process_batch(client_ids):
     for attempt in range(MAX_RETRIES):
@@ -77,7 +68,13 @@ def _run_batch_logic(client_ids):
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
 
-    value_maps = load_value_maps(cursor)
+    ip_map = load_lookup_map(cursor, "dreamsapp_implementingpartner")
+    doc_ver_map = load_lookup_map(cursor, "DreamsApp_verificationdocument_mapping")
+    marital_status_map = load_lookup_map(cursor, "DreamsApp_maritalstatus_mapping")
+    county_map = load_lookup_map(cursor, "dreamsapp_county")
+    subcounty_map = load_lookup_map(cursor, "dreamsapp_subcounty")
+    ward_map = load_lookup_map(cursor, "dreamsapp_ward")
+    ext_org_map = load_lookup_map(cursor, "dreamsapp_externalorganisation")
 
     format_strings = ','.join(['%s'] * len(client_ids))
     cursor.execute(f"""
@@ -89,8 +86,14 @@ def _run_batch_logic(client_ids):
     client_map = {row['client_id']: (row['patient_id'], row['encounter_id']) for row in cursor.fetchall()}
 
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    obs_data = []
-    log_data = []
+    temp_data = []
+
+    type_map = {
+        "coded": "value_coded",
+        "text": "value_text",
+        "date": "value_datetime",
+        "numeric": "value_numeric"
+    }
 
     for client_id in client_ids:
         cursor.execute("SELECT * FROM tbl_m_demographics WHERE client_id = %s", (client_id,))
@@ -107,51 +110,78 @@ def _run_batch_logic(client_ids):
             if value in (None, ""):
                 continue
 
-            if config["type"] == "coded" and field in value_maps:
-                value = value_maps[field].get(str(value))
-                if not value:
+            if config["type"] == "coded":
+                if field == "implementing_partner_id":
+                    value = ip_map.get(str(value))
+                elif field == "verification_document_id":
+                    value = doc_ver_map.get(str(value))
+                elif field == "marital_status_id":
+                    value = marital_status_map.get(str(value))
+                elif field == "county_of_residence_id":
+                    value = county_map.get(str(value))
+                elif field == "sub_county_id":
+                    value = subcounty_map.get(str(value))
+                elif field == "ward_id":
+                    value = ward_map.get(str(value))
+                elif field == "external_organisation_id":
+                    value = ext_org_map.get(str(value))
+                if value is None:
                     continue
 
-            field_map = {
-                "coded": "value_coded",
-                "text": "value_text",
-                "date": "value_datetime",
-                "numeric": "value_numeric"
-            }
-            value_field = field_map.get(config["type"])
-            if not value_field:
-                continue
-
+            value_type = type_map[config["type"]]
             obs_uuid = str(uuid.uuid4())
-            obs_data.append((
+            temp_row = (
                 obs_uuid, person_id, config["concept_id"], encounter_id,
-                now, 1, value, 1, now, 0
-            ))
-
-            log_data.append((None, person_id, encounter_id, config["concept_id"], field, str(value)))
-
-    if obs_data:
-        # Use the last value field seen — all rows in obs_data will use this field name
-        insert_query = f"""
-            INSERT INTO obs (
-                uuid, person_id, concept_id, encounter_id, obs_datetime,
-                location_id, {value_field}, creator, date_created, voided
+                now, 1, value_type,
+                value if value_type == "value_text" else None,
+                value if value_type == "value_coded" else None,
+                value if value_type == "value_datetime" else None,
+                value if value_type == "value_numeric" else None,
+                1, now, 0
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        cursor.executemany(insert_query, obs_data)
+            temp_data.append(temp_row)
 
-        cursor.execute("SELECT LAST_INSERT_ID()")
-        start_id = cursor.fetchone()['LAST_INSERT_ID()']
+    if not temp_data:
+        cursor.close()
+        conn.close()
+        return
 
-        for i in range(len(log_data)):
-            log_data[i] = (start_id + i,) + log_data[i][1:]
+    cursor.execute("""
+        CREATE TEMPORARY TABLE IF NOT EXISTS temp_obs (
+            uuid CHAR(38),
+            person_id INT,
+            concept_id INT,
+            encounter_id INT,
+            obs_datetime DATETIME,
+            location_id INT,
+            value_type ENUM('value_coded', 'value_text', 'value_datetime', 'value_numeric'),
+            value_text TEXT,
+            value_coded INT,
+            value_datetime DATETIME,
+            value_numeric DECIMAL(10,2),
+            creator INT,
+            date_created DATETIME,
+            voided TINYINT
+        ) ENGINE=InnoDB
+    """)
 
-        cursor.executemany("""
-            INSERT INTO obs_migration_log 
-            (obs_id, person_id, encounter_id, concept_id, field_name, value)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, log_data)
+    cursor.executemany("""
+        INSERT INTO temp_obs (
+            uuid, person_id, concept_id, encounter_id, obs_datetime,
+            location_id, value_type, value_text, value_coded,
+            value_datetime, value_numeric, creator, date_created, voided
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, temp_data)
+
+    cursor.callproc("insert_from_temp_obs")
+
+    cursor.execute("SELECT LAST_INSERT_ID()")
+    last_id = cursor.fetchone()['LAST_INSERT_ID()']
+    total_inserted = len(temp_data)
+    obs_ids = [(last_id + i,) for i in range(total_inserted)]
+
+    if LOG_EXTRA_FIELDS:
+        cursor.executemany("INSERT INTO obs_migration_log (obs_id) VALUES (%s)", obs_ids)
 
     conn.commit()
     cursor.close()
@@ -160,7 +190,7 @@ def _run_batch_logic(client_ids):
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
-    cursor.execute("SELECT client_id FROM tbl_m_demographics WHERE client_id <= 2689322")
+    cursor.execute("SELECT client_id FROM tbl_m_demographics WHERE client_id <= 2689322") #
     client_ids = [row[0] for row in cursor.fetchall()]
     cursor.close()
     conn.close()
