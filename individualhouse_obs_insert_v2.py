@@ -2,24 +2,21 @@ import mysql.connector
 import uuid
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
+import time
+import random
 
 # DB config
-SOURCE_DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
-    'database': 'dreams_production'
-}
-
-DEST_DB_CONFIG = {
+DB_CONFIG = {
     'host': 'localhost',
     'user': 'root',
     'password': 'test',
     'database': 'openmrs'
 }
 
-BATCH_SIZE = 100000
+BATCH_SIZE = 10000
 NUM_WORKERS = cpu_count()
+MAX_RETRIES = 5
+RETRY_BACKOFF = (2, 6)
 
 concept_map = {
     "head_of_household_id": {"concept_id": 1000686, "type": "coded"},
@@ -51,7 +48,7 @@ concept_map = {
 
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
-    return {str(row[0]): row[1] for row in cursor.fetchall()}
+    return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
 
 def load_all_maps(cursor):
     return {
@@ -69,59 +66,47 @@ def get_person_and_encounter(cursor, client_id):
     row = cursor.fetchone()
     if not row:
         return None, None, None
-    patient_id = row[0]
+    patient_id = row['patient_id']
     cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s", (patient_id,))
     encounter = cursor.fetchone()
-    return patient_id, patient_id, encounter[0] if encounter else None
-
-def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
-    if value in (None, ""):
-        return
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    obs_uuid = str(uuid.uuid4())
-
-    field_map = {
-        "coded": "value_coded",
-        "text": "value_text",
-        "date": "value_datetime",
-        "numeric": "value_numeric"
-    }
-    value_field = field_map.get(value_type)
-    if not value_field:
-        return
-
-    cursor.execute(f"""
-        INSERT INTO obs (
-            uuid, person_id, concept_id, encounter_id, obs_datetime, location_id,
-            {value_field}, creator, date_created, voided
-        )
-        VALUES (%s, %s, %s, %s, %s, 1, %s, 1, %s, 0)
-    """, (obs_uuid, person_id, concept_id, encounter_id, now, value, now))
-
-    obs_id = cursor.lastrowid
-    cursor.execute("""
-        INSERT INTO obs_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
+    return patient_id, patient_id, encounter['encounter_id'] if encounter else None
 
 def process_batch(client_ids):
-    src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
-    dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
-    src_cursor = src_conn.cursor(dictionary=True)
-    dest_cursor = dest_conn.cursor()
-    maps = load_all_maps(dest_cursor)
+    for attempt in range(MAX_RETRIES):
+        try:
+            _run_batch_logic(client_ids)
+            return
+        except mysql.connector.Error as e:
+            if e.errno == 1205:
+                wait = random.uniform(*RETRY_BACKOFF)
+                print(f"[Batch Retry {attempt+1}] Lock timeout. Retrying in {wait:.1f}s...")
+                time.sleep(wait)
+            else:
+                raise
+
+def _run_batch_logic(client_ids):
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
+
+    maps = load_all_maps(cursor)
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    temp_data = []
 
     for client_id in client_ids:
-        src_cursor.execute("SELECT * FROM tbl_m_household WHERE client_id = %s", (client_id,))
-        row = src_cursor.fetchone()
+        cursor.execute("SELECT * FROM tbl_m_household WHERE client_id = %s", (client_id,))
+        row = cursor.fetchone()
         if not row:
             continue
-        person_id, _, encounter_id = get_person_and_encounter(dest_cursor, client_id)
+
+        person_id, _, encounter_id = get_person_and_encounter(cursor, client_id)
         if not person_id or not encounter_id:
             continue
 
         for field, config in concept_map.items():
             value = row.get(field)
+            if value in (None, ""):
+                continue
+
             if config["type"] == "coded":
                 if field == "head_of_household_id":
                     value = maps["head_of_household_id"].get(str(value))
@@ -142,19 +127,65 @@ def process_batch(client_ids):
                 elif field == "disabilitytype_id":
                     value = maps["disability"].get(str(value))
 
-            insert_obs(dest_cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
+                if value is None:
+                    continue
 
-        dest_conn.commit()
+            type_map = {
+                "coded": "value_coded",
+                "text": "value_text",
+                "date": "value_datetime",
+                "numeric": "value_numeric"
+            }
+            value_type = type_map[config["type"]]
 
-    src_cursor.close()
-    dest_cursor.close()
-    src_conn.close()
-    dest_conn.close()
+            obs_uuid = str(uuid.uuid4())
+            temp_data.append((
+                obs_uuid, person_id, config["concept_id"], encounter_id,
+                now, 1, value_type,
+                value if value_type == "value_text" else None,
+                value if value_type == "value_coded" else None,
+                value if value_type == "value_datetime" else None,
+                value if value_type == "value_numeric" else None,
+                1, now, 0
+            ))
+
+    if temp_data:
+        cursor.execute("""
+            CREATE TEMPORARY TABLE IF NOT EXISTS temp_obs (
+                uuid CHAR(38),
+                person_id INT,
+                concept_id INT,
+                encounter_id INT,
+                obs_datetime DATETIME,
+                location_id INT,
+                value_type ENUM('value_coded', 'value_text', 'value_datetime', 'value_numeric'),
+                value_text TEXT,
+                value_coded INT,
+                value_datetime DATETIME,
+                value_numeric DECIMAL(10,2),
+                creator INT,
+                date_created DATETIME,
+                voided TINYINT
+            ) ENGINE=InnoDB
+        """)
+        cursor.executemany("""
+            INSERT INTO temp_obs (
+                uuid, person_id, concept_id, encounter_id, obs_datetime, location_id,
+                value_type, value_text, value_coded, value_datetime, value_numeric,
+                creator, date_created, voided
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, temp_data)
+
+        cursor.execute("CALL insert_from_temp_obs()")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 def main():
-    conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
+    conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
-    cursor.execute("SELECT client_id FROM tbl_m_household WHERE client_id <= 2689322")
+    cursor.execute("SELECT client_id FROM tbl_m_household WHERE implementing_partner_id IN (35,37,39) AND  client_id <= 2689322")
     client_ids = [row[0] for row in cursor.fetchall()]
     cursor.close()
     conn.close()
