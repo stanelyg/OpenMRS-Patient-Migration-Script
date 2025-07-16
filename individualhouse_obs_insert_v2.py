@@ -147,6 +147,11 @@ def _run_batch_logic(client_ids):
             }
             value_type = type_map[config["type"]]
 
+            # Check if already exists
+            cursor.execute("SELECT 1 FROM obs WHERE person_id = %s AND concept_id = %s AND voided = 0 LIMIT 1", (person_id, config["concept_id"]))
+            if cursor.fetchone():
+                continue
+
             obs_uuid = str(uuid.uuid4())
             temp_data.append((
                 obs_uuid, person_id, config["concept_id"], encounter_id,
@@ -204,7 +209,7 @@ def main():
         SELECT h.client_id FROM tbl_m_household h
         INNER JOIN dreams_client_patient_mapping pm ON h.client_id = pm.client_id
         INNER JOIN tbl_m_demographics d ON h.client_id = d.client_id
-        WHERE d.implementing_partner_id IN (35, 37, 39)
+        WHERE d.implementing_partner_id=37
     """)
     client_ids = [row['client_id'] for row in cursor.fetchall()]
     cursor.close()
