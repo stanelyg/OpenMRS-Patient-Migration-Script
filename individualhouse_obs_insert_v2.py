@@ -184,12 +184,14 @@ def _run_batch_logic(client_ids):
 
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor()
-    cursor.execute(""" SELECT h.client_id FROM tbl_m_household h
-                   INNER JOIN dreams_client_patient_mapping pm on h.client_id=pm.client_id
-                   INNER JOIN tbl_m_demographics d on h.client_id=d.client_id                   
-                   WHERE d.implementing_partner_id IN (35,37,39) AND h.client_id""")
-    client_ids = [row[0] for row in cursor.fetchall()]
+    cursor = conn.cursor(dictionary=True)  # Important: dictionary=True
+    cursor.execute("""
+        SELECT h.client_id FROM tbl_m_household h
+        INNER JOIN dreams_client_patient_mapping pm ON h.client_id = pm.client_id
+        INNER JOIN tbl_m_demographics d ON h.client_id = d.client_id
+        WHERE d.implementing_partner_id IN (35, 37, 39)
+    """)
+    client_ids = [row['client_id'] for row in cursor.fetchall()]
     cursor.close()
     conn.close()
 
