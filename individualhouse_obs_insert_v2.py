@@ -48,7 +48,8 @@ concept_map = {
 
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
-    return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
+    result = cursor.fetchall()
+    return {str(row['id']): row['concept_id'] for row in result} if result else {}
 
 def load_all_maps(cursor):
     return {
@@ -64,11 +65,16 @@ def load_all_maps(cursor):
 def get_person_and_encounter(cursor, client_id):
     cursor.execute("SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id = %s", (client_id,))
     row = cursor.fetchone()
+    if cursor.with_rows:
+        cursor.fetchall()
     if not row:
         return None, None, None
     patient_id = row['patient_id']
+
     cursor.execute("SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s", (patient_id,))
     encounter = cursor.fetchone()
+    if cursor.with_rows:
+        cursor.fetchall()
     return patient_id, patient_id, encounter['encounter_id'] if encounter else None
 
 def process_batch(client_ids):
@@ -95,6 +101,8 @@ def _run_batch_logic(client_ids):
     for client_id in client_ids:
         cursor.execute("SELECT * FROM tbl_m_household WHERE client_id = %s", (client_id,))
         row = cursor.fetchone()
+        if cursor.with_rows:
+            cursor.fetchall()
         if not row:
             continue
 
@@ -184,7 +192,7 @@ def _run_batch_logic(client_ids):
 
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor(dictionary=True)  # Important: dictionary=True
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT h.client_id FROM tbl_m_household h
         INNER JOIN dreams_client_patient_mapping pm ON h.client_id = pm.client_id
