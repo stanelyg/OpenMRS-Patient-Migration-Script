@@ -188,7 +188,7 @@ def main():
     cursor.execute(""" SELECT h.client_id FROM tbl_m_household h
                    INNER JOIN dreams_client_patient_mapping pm on h.client_id=pm.client_id
                    INNER JOIN tbl_m_demographics d on h.client_id=d.client_id                   
-                   WHERE d.implementing_partner_id IN (35,37,39) AND h.client_id <= 2689322 """)
+                   WHERE d.implementing_partner_id IN (35,37,39) AND h.client_id""")
     client_ids = [row[0] for row in cursor.fetchall()]
     cursor.close()
     conn.close()

@@ -154,8 +154,9 @@ def main():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
     cursor.execute(""" SELECT hv.client_id FROM tbl_m_hivtesting hv
+                   INNER JOIN dreams_client_patient_mapping pm on hv.client_id=pm.client_id
                    INNER JOIN tbl_m_demographics d on hv.client_id=d.client_id
-                   WHERE d.implementing_partner_id IN (35,37,39) AND hv.client_id <= 2689322 """)
+                   WHERE d.implementing_partner_id IN (35,37,39)""")
     client_ids = [row[0] for row in cursor.fetchall()]
     cursor.close()
     conn.close()
