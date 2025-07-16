@@ -17,6 +17,7 @@ BATCH_SIZE = 1000
 NUM_WORKERS = cpu_count()
 MAX_RETRIES = 5
 RETRY_BACKOFF = (2, 6)
+LOG_EXTRA_FIELDS = True
 
 concept_map = {
     "head_of_household_id": {"concept_id": 1000686, "type": "coded"},
@@ -185,6 +186,12 @@ def _run_batch_logic(client_ids):
         """, temp_data)
 
         cursor.execute("CALL insert_from_temp_obs()")
+
+        if LOG_EXTRA_FIELDS:
+            cursor.execute("SELECT LAST_INSERT_ID() AS last_id")
+            last_id = cursor.fetchone()["last_id"]
+            obs_ids = [(last_id + i,) for i in range(len(temp_data))]
+            cursor.executemany("INSERT INTO obs_migration_log (obs_id) VALUES (%s)", obs_ids)
 
     conn.commit()
     cursor.close()
