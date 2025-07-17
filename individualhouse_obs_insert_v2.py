@@ -13,7 +13,7 @@ DB_CONFIG = {
     'database': 'openmrs'
 }
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 500
 NUM_WORKERS = cpu_count()
 MAX_RETRIES = 5
 RETRY_BACKOFF = (2, 6)
