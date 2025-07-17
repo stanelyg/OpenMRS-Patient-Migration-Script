@@ -98,6 +98,7 @@ def _run_batch_logic(client_ids):
     maps = load_all_maps(cursor)
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     temp_data = []
+    uuids = []
 
     for client_id in client_ids:
         cursor.execute("SELECT * FROM tbl_m_household WHERE client_id = %s", (client_id,))
@@ -153,6 +154,7 @@ def _run_batch_logic(client_ids):
                 continue
 
             obs_uuid = str(uuid.uuid4())
+            uuids.append(obs_uuid)
             temp_data.append((
                 obs_uuid, person_id, config["concept_id"], encounter_id,
                 now, 1, value_type,
@@ -192,11 +194,11 @@ def _run_batch_logic(client_ids):
 
         cursor.execute("CALL insert_from_temp_obs()")
 
-        if LOG_EXTRA_FIELDS:
-            cursor.execute("SELECT LAST_INSERT_ID() AS last_id")
-            last_id = cursor.fetchone()["last_id"]
-            obs_ids = [(last_id + i,) for i in range(len(temp_data))]
-            cursor.executemany("INSERT INTO obs_migration_log (obs_id) VALUES (%s)", obs_ids)
+        if LOG_EXTRA_FIELDS and uuids:
+            cursor.execute("SELECT obs_id FROM obs WHERE uuid IN (%s)" % ",".join(["%s"] * len(uuids)), uuids)
+            obs_ids = [(row["obs_id"],) for row in cursor.fetchall()]
+            if obs_ids:
+                cursor.executemany("INSERT INTO obs_migration_log (obs_id) VALUES (%s)", obs_ids)
 
     conn.commit()
     cursor.close()
