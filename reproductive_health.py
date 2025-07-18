@@ -6,8 +6,8 @@ from multiprocessing import Pool, cpu_count
 # DB config
 DEST_DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 
 }
