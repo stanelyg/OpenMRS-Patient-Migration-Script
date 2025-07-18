@@ -8,8 +8,8 @@ import random
 # DB config
 DEST_DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
 
