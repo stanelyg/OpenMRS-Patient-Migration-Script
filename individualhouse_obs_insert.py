@@ -5,17 +5,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 
-SOURCE_DB_CONFIG = {
+DB_CONFIG = {
     'host': 'localhost',
-    'user':'root',
-    'password': 'test',
-    'database': 'dreams_production'
-}
-
-DEST_DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
 
@@ -111,25 +104,23 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
 
 
 def main():
-    src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
-    dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
-    src_cursor = src_conn.cursor(dictionary=True)
-    dest_cursor = dest_conn.cursor(dictionary=True)
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
 
-    householdhead_map = load_value_map(dest_cursor, "DreamsApp_householdhead_mapping")
-    categorical_map = load_value_map(dest_cursor, "DreamsApp_categoricalresponse_mapping")
-    floormaterial_map = load_value_map(dest_cursor, "dreamsapp_floormaterial")
-    roofingmaterial_map = load_value_map(dest_cursor, "dreamsapp_roofingmaterial")
-    wallmaterial_map = load_value_map(dest_cursor, "dreamsapp_wallmaterial")
-    drinkingwater_map = load_value_map(dest_cursor, "dreamsapp_drinkingwater")
-    disabilitytype_map = load_value_map(dest_cursor, "dreamsapp_disabilitytype")
+    householdhead_map = load_value_map(cursor, "DreamsApp_householdhead_mapping")
+    categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
+    floormaterial_map = load_value_map(cursor, "dreamsapp_floormaterial")
+    roofingmaterial_map = load_value_map(cursor, "dreamsapp_roofingmaterial")
+    wallmaterial_map = load_value_map(cursor, "dreamsapp_wallmaterial")
+    drinkingwater_map = load_value_map(cursor, "dreamsapp_drinkingwater")
+    disabilitytype_map = load_value_map(cursor, "dreamsapp_disabilitytype")
     
 
     # Read source data
-    src_cursor.execute("SELECT * FROM tbl_m_household where client_id <= 2689322")
-    for row in src_cursor.fetchall():
+    cursor.execute("SELECT * FROM tbl_m_household where client_id <= 2689322")
+    for row in cursor.fetchall():
         client_id = row["client_id"]
-        person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor, int(client_id))
+        person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
@@ -163,12 +154,9 @@ def main():
                     value = categorical_map.get(str(value))
                 elif field == "currently_in_ct_program_id":
                     value = categorical_map.get(str(value))
-            insert_obs(dest_cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
-    dest_conn.commit()
-    src_cursor.close()
-    dest_cursor.close()
-    src_conn.close()
-    dest_conn.close()
+            insert_obs(cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
+    conn.commit()
+    cursor.close()
     print("Data successfully migrated to obs.")
 
 if __name__ == "__main__":

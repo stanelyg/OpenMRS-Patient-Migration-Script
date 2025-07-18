@@ -7,8 +7,8 @@ import os
 
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 }
 

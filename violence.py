@@ -172,7 +172,7 @@ def main():
 
 
             insert_obs(cursor, person_id, encounter_id, config["concept_id"],value, config["type"], field)
-    cursor.commit()
+    conn.commit()
     cursor.close()
     print("Violence data successfully migrated to obs.")
 
