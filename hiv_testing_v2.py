@@ -89,10 +89,9 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
-def process_batch(client_ids):
-    conn = mysql.connector.connect(**DB_CONFIG)
+def main():
+    conn = mysql.connector.connect(**DEST_DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
-
     # load mappings
     categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
     period_last_test_map = load_value_map(cursor, "DreamsApp_periodresponse_mapping")
@@ -100,24 +99,22 @@ def process_batch(client_ids):
     reasonnotinhivcare_map = load_value_map(cursor, "DreamsApp_reasonnotinhivcare_mapping")
     reasonnottestedforhiv_map = load_value_map(cursor, "DreamsApp_reasonnottestedforhiv_mapping")
 
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    temp_data = []
-
-    for client_id in client_ids:
-        cursor.execute("SELECT * FROM tbl_m_hivtesting WHERE client_id = %s", (client_id,))
-        row = cursor.fetchone()
-        if not row:
-            continue
-
-        person_id, _, encounter_id = get_person_and_encounter(cursor, client_id)
+    cursor.execute(""" SELECT *  FROM tbl_m_hivtesting hv
+            WHERE EXISTS (
+                SELECT 1 FROM dreams_client_patient_mapping pm
+                WHERE pm.client_id = hv.client_id
+            )
+            AND EXISTS (
+                SELECT 1 FROM tbl_m_demographics d
+                WHERE d.client_id = hv.client_id AND d.implementing_partner_id IN (37, 39))""")
+    for row in cursor.fetchall():
+        client_id = row["client_id"]       
+        person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
         if not person_id or not encounter_id:
+            print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
-
         for field, config in concept_map.items():
-            value = cast_to_number(row.get(field))
-            if value in (None, ""):
-                continue
-
+            value = row.get(field) 
             if config["type"] == "coded":
                 if field in ("ever_tested_for_hiv_id", "enrolled_in_hiv_care_id", "knowledge_of_hiv_test_centres_id"):
                     value = categorical_map.get(str(value))
@@ -130,77 +127,10 @@ def process_batch(client_ids):
                 elif field == "reasonnottestedforhiv_id":
                     value = reasonnottestedforhiv_map.get(str(value))
                 if value is None:
-                    continue
-
-            type_map = {
-                "coded": "value_coded",
-                "text": "value_text",
-                "date": "value_datetime",
-                "numeric": "value_numeric"
-            }
-            value_type = type_map[config["type"]]
-
-            obs_uuid = str(uuid.uuid4())
-            temp_data.append((
-                obs_uuid, person_id, config["concept_id"], encounter_id,
-                now, 1, value_type,
-                value if value_type == "value_text" else None,
-                value if value_type == "value_coded" else None,
-                value if value_type == "value_datetime" else None,
-                value if value_type == "value_numeric" else None,
-                1, now, 0
-            ))
-
-    if temp_data:
-        cursor.execute("""
-            CREATE TEMPORARY TABLE IF NOT EXISTS temp_obs (
-                uuid CHAR(38),
-                person_id INT,
-                concept_id INT,
-                encounter_id INT,
-                obs_datetime DATETIME,
-                location_id INT,
-                value_type ENUM('value_coded', 'value_text', 'value_datetime', 'value_numeric'),
-                value_text TEXT,
-                value_coded INT,
-                value_datetime DATETIME,
-                value_numeric DECIMAL(10,2),
-                creator INT,
-                date_created DATETIME,
-                voided TINYINT
-            ) ENGINE=InnoDB
-        """)
-        cursor.executemany("""
-            INSERT INTO temp_obs (
-                uuid, person_id, concept_id, encounter_id, obs_datetime, location_id,
-                value_type, value_text, value_coded, value_datetime, value_numeric,
-                creator, date_created, voided
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, temp_data)
-
-        cursor.execute("CALL insert_from_temp_obs()")
-
+                    continue   
+            insert_obs(cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
     conn.commit()
     cursor.close()
-    conn.close()
-
-def main():
-    conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor()
-    cursor.execute(""" SELECT hv.client_id FROM tbl_m_hivtesting hv
-                   INNER JOIN dreams_client_patient_mapping pm on hv.client_id=pm.client_id
-                   INNER JOIN tbl_m_demographics d on hv.client_id=d.client_id
-                   WHERE d.implementing_partner_id IN (35,37,39)""")
-    client_ids = [row[0] for row in cursor.fetchall()]
-    cursor.close()
-    conn.close()
-
-    batches = [client_ids[i:i + BATCH_SIZE] for i in range(0, len(client_ids), BATCH_SIZE)]
-
-    with Pool(NUM_WORKERS) as pool:
-        pool.map(process_batch, batches)
-
-    print("HIV testing obs migration complete.")
-
+    print("HIV Testing Data successfully migrated to obs.")  
 if __name__ == "__main__":
     main()
