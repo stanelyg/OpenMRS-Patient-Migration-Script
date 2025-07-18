@@ -8,12 +8,12 @@ import random
 # DB config
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 500
 NUM_WORKERS = cpu_count()
 MAX_RETRIES = 5
 RETRY_BACKOFF = (2, 6)
@@ -168,9 +168,14 @@ def process_batch(client_ids):
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
-    cursor.execute(""" SELECT ed.client_id FROM tbl_m_edu_empl ed
-                   INNER JOIN tbl_m_demographics d on ed.client_id=d.client_id
-                   WHERE d.implementing_partner_id IN (35,37,39) AND ed.client_id <= 2689322 """)
+    cursor.execute(""" SELECT ed.client_id  FROM tbl_m_edu_empl ed
+                        WHERE EXISTS (
+                            SELECT 1 FROM tbl_m_demographics d
+                            WHERE d.client_id = ed.client_id AND d.implementing_partner_id = 37
+                        )
+                        AND EXISTS (
+                            SELECT 1 FROM dreams_client_patient_mapping pm
+                            WHERE pm.client_id = ed.client_id) """)
     client_ids = [row[0] for row in cursor.fetchall()]
     cursor.close()
     conn.close()
