@@ -14,7 +14,7 @@ DEST_DB_CONFIG = {
 
 concept_map = {
     "has_biological_children_id": {"concept_id": 1000806, "type": "coded"},
-    "no_of_biological_children": {"concept_id": 1000929, "type": "numeric"},
+    "no_of_biological_children": {"concept_id": 1000709, "type": "numeric"},
     "currently_pregnant_id": {"concept_id": 1000807, "type": "coded"},
     "current_anc_enrollment_id": {"concept_id": 1001721, "type": "coded"},
     "anc_facility_name": {"concept_id": 1000809, "type": "text"},
