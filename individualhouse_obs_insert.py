@@ -73,7 +73,6 @@ def get_person_and_encounter(cursor,client_id):
     return patient_id, patient_id, encounter_id
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
-    print(person_id,'-',encounter_id)
     if value is None or value == "":
         return
     obs_uuid = str(uuid.uuid4())
@@ -104,7 +103,6 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
-
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
@@ -127,7 +125,7 @@ def main():
         )
         AND EXISTS (
             SELECT 1 FROM tbl_m_demographics d 
-            WHERE d.client_id = h.client_id AND d.implementing_partner_id = 37
+            WHERE d.client_id = h.client_id AND d.implementing_partner_id = 39
         )
     """)
     for row in cursor.fetchall():

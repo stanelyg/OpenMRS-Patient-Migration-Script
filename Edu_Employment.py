@@ -96,7 +96,7 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
     cursor.execute("""
         INSERT INTO obs_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
         VALUES (%s, %s, %s, %s, %s, %s)
-    """, (obs_id, person_id, '', '', '', str(value)))
+    """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
 
 def main():
