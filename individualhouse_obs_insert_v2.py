@@ -41,6 +41,7 @@ concept_map = {
     "no_of_people_in_household": {"concept_id": 1000705, "type": "numeric"},
     "no_of_females": {"concept_id": 1000706, "type": "numeric"},
     "no_of_males": {"concept_id": 1000707, "type": "numeric"},
+    "no_of_adults": {"concept_id": 1000708, "type": "numeric"},
     "no_of_children": {"concept_id": 1000709, "type": "numeric"},
     "ever_enrolled_in_ct_program_id": {"concept_id": 1000710, "type": "coded"},
     "currently_in_ct_program_id": {"concept_id": 1001770, "type": "coded"},
