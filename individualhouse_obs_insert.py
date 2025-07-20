@@ -120,10 +120,15 @@ def main():
 
     # Read source data
     cursor.execute("""
-        SELECT * FROM tbl_m_household h
-        INNER JOIN dreams_client_patient_mapping pm ON h.client_id = pm.client_id
-        INNER JOIN tbl_m_demographics d ON h.client_id = d.client_id
-        WHERE d.implementing_partner_id=37
+        SELECT h.*
+        FROM tbl_m_household h
+        WHERE EXISTS (
+            SELECT 1 FROM dreams_client_patient_mapping pm WHERE pm.client_id = h.client_id
+        )
+        AND EXISTS (
+            SELECT 1 FROM tbl_m_demographics d 
+            WHERE d.client_id = h.client_id AND d.implementing_partner_id = 37
+        )
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
