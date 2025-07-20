@@ -190,7 +190,10 @@ def _run_batch_logic(client_ids):
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
-    cursor.execute("SELECT client_id FROM tbl_m_demographics WHERE implementing_partner_id=35 AND client_id <= 2689322") #
+    cursor.execute("""SELECT d.client_id
+        FROM tbl_m_demographics d
+        INNER JOIN dreams_client_patient_mapping pm ON d.client_id = pm.client_id
+        WHERE d.implementing_partner_id = 37""") #
     client_ids = [row[0] for row in cursor.fetchall()]
     cursor.close()
     conn.close()
