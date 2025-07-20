@@ -96,7 +96,7 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
     cursor.execute("""
         INSERT INTO obs_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
         VALUES (%s, %s, %s, %s, %s, %s)
-    """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
+    """, (obs_id, person_id, '', '', '', str(value)))
 
 
 def main():
@@ -115,7 +115,7 @@ def main():
     cursor.execute(""" SELECT * FROM tbl_m_edu_empl ed
                         WHERE EXISTS (
                             SELECT 1 FROM tbl_m_demographics d
-                            WHERE d.client_id = ed.client_id AND d.implementing_partner_id = 39
+                            WHERE d.client_id = ed.client_id AND d.implementing_partner_id = 37
                         )
                         AND EXISTS (
                             SELECT 1 FROM dreams_client_patient_mapping pm

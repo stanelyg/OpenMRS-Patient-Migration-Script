@@ -5,14 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 
-SOURCE_DB_CONFIG = {
-    'host': 'localhost',
-    'user':'root',
-    'password': 'test',
-    'database': 'dreams_production'
-}
-
-DEST_DB_CONFIG = {
+DB_CONFIG = {
     'host': 'localhost',
     'user': 'root',
     'password': 'test',
@@ -114,29 +107,31 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
     cursor.execute("""
         INSERT INTO obs_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
         VALUES (%s, %s, %s, %s, %s, %s)
-    """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
+    """, (obs_id, person_id, '', '', '', str(value)))
 
 
 def main():
-    src_conn = mysql.connector.connect(**SOURCE_DB_CONFIG)
-    dest_conn = mysql.connector.connect(**DEST_DB_CONFIG)
-    src_cursor = src_conn.cursor(dictionary=True)
-    dest_cursor = dest_conn.cursor(dictionary=True)
-
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
     # Load mapping tables
-    ip_map = load_value_map(dest_cursor, "dreamsapp_implementingpartner")
-    doc_ver_map = load_value_map(dest_cursor, "DreamsApp_verificationdocument_mapping")
-    marital_status_map = load_value_map(dest_cursor, "DreamsApp_maritalstatus_mapping")
-    county_map = load_value_map(dest_cursor, "dreamsapp_county")
-    subcounty_map = load_value_map(dest_cursor, "dreamsapp_subcounty")
-    ward_map = load_value_map(dest_cursor, "dreamsapp_ward")
-    ext_org_map = load_value_map(dest_cursor, "dreamsapp_externalorganisation")
+    ip_map = load_value_map(cursor, "dreamsapp_implementingpartner")
+    doc_ver_map = load_value_map(cursor, "DreamsApp_verificationdocument_mapping")
+    marital_status_map = load_value_map(cursor, "DreamsApp_maritalstatus_mapping")
+    county_map = load_value_map(cursor, "dreamsapp_county")
+    subcounty_map = load_value_map(cursor, "dreamsapp_subcounty")
+    ward_map = load_value_map(cursor, "dreamsapp_ward")
+    ext_org_map = load_value_map(cursor, "dreamsapp_externalorganisation")
 
     # Read source data
-    src_cursor.execute("SELECT * FROM tbl_m_demographics where client_id <= 2689322")
-    for row in src_cursor.fetchall():
+    cursor.execute("""
+        SELECT *
+            FROM tbl_m_demographics d
+            INNER JOIN dreams_client_patient_mapping pm ON d.client_id = pm.client_id
+            WHERE d.implementing_partner_id = 37
+    """)
+    for row in cursor.fetchall():
         client_id = row["client_id"]       
-        person_id, patient_id, encounter_id = get_person_and_encounter(dest_cursor,client_id)
+        person_id, patient_id, encounter_id = get_person_and_encounter(cursor,client_id)
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
@@ -159,13 +154,10 @@ def main():
                 elif field == "external_organisation_id":
                     value = ext_org_map.get(str(value))
 
-            insert_obs(dest_cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
+            insert_obs(cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
 
-    dest_conn.commit()
-    src_cursor.close()
-    dest_cursor.close()
-    src_conn.close()
-    dest_conn.close()
+    conn.commit()
+    cursor.close()
     print("Data successfully migrated to `obs`.")
 
 if __name__ == "__main__":

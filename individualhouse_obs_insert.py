@@ -7,8 +7,8 @@ import os
 
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 }
 
@@ -119,7 +119,12 @@ def main():
     
 
     # Read source data
-    cursor.execute("SELECT * FROM tbl_m_household where client_id <= 2689322")
+    cursor.execute("""
+        SELECT * FROM tbl_m_household h
+        INNER JOIN dreams_client_patient_mapping pm ON h.client_id = pm.client_id
+        INNER JOIN tbl_m_demographics d ON h.client_id = d.client_id
+        WHERE d.implementing_partner_id=37
+    """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
