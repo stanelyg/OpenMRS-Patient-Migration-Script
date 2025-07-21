@@ -108,7 +108,7 @@ def main():
             )
             AND EXISTS (
                 SELECT 1 FROM tbl_m_demographics d
-                WHERE d.client_id = sxa.client_id AND d.implementing_partner_id =37) 
+                WHERE d.client_id = sxa.client_id AND d.implementing_partner_id =39) 
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
