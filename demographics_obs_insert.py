@@ -107,8 +107,7 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
     cursor.execute("""
         INSERT INTO obs_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
         VALUES (%s, %s, %s, %s, %s, %s)
-    """, (obs_id, person_id, '', '', '', str(value)))
-
+    """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
@@ -127,7 +126,7 @@ def main():
         SELECT *
             FROM tbl_m_demographics d
             INNER JOIN dreams_client_patient_mapping pm ON d.client_id = pm.client_id
-            WHERE d.implementing_partner_id = 37
+            WHERE d.implementing_partner_id IN (12,35)
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]       
