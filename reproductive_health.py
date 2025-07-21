@@ -13,19 +13,19 @@ DEST_DB_CONFIG = {
 }
 
 concept_map = {
-    "has_biological_children_id": {"concept_id": 1000806, "type": "coded"},
-    "no_of_biological_children": {"concept_id": 1000709, "type": "numeric"},
-    "currently_pregnant_id": {"concept_id": 1000807, "type": "coded"},
-    "current_anc_enrollment_id": {"concept_id": 1001721, "type": "coded"},
-    "anc_facility_name": {"concept_id": 1000809, "type": "text"},
-    "fp_methods_awareness_id": {"concept_id": 1000810, "type": "coded"},
-    "familyplanningmethod_id": {"concept_id": 1000817, "type": "coded"},
-    "known_fp_method_other": {"concept_id": 1001722, "type": "text"},
-    "currently_use_modern_fp_id": {"concept_id": 1000819, "type": "coded"},
-    "current_fp_method_id": {"concept_id": 1000820, "type": "coded"},
-    "current_fp_method_other": {"concept_id": 1001723, "type": "text"},
-    "reason_not_using_fp_id": {"concept_id": 1000822, "type": "coded"},
-    "reason_not_using_fp_other": {"concept_id": 1001724, "type": "text"}
+    # "has_biological_children_id": {"concept_id": 1000806, "type": "coded"},
+    "no_of_biological_children": {"concept_id": 1000929, "type": "numeric"},
+    # "currently_pregnant_id": {"concept_id": 1000807, "type": "coded"},
+    # "current_anc_enrollment_id": {"concept_id": 1001721, "type": "coded"},
+    # "anc_facility_name": {"concept_id": 1000809, "type": "text"},
+    # "fp_methods_awareness_id": {"concept_id": 1000810, "type": "coded"},
+    # "familyplanningmethod_id": {"concept_id": 1000817, "type": "coded"},
+    # "known_fp_method_other": {"concept_id": 1001722, "type": "text"},
+    # "currently_use_modern_fp_id": {"concept_id": 1000819, "type": "coded"},
+    # "current_fp_method_id": {"concept_id": 1000820, "type": "coded"},
+    # "current_fp_method_other": {"concept_id": 1001723, "type": "text"},
+    # "reason_not_using_fp_id": {"concept_id": 1000822, "type": "coded"},
+    # "reason_not_using_fp_other": {"concept_id": 1001724, "type": "text"}
 }
 
 # Load ID-to-concept mappings from lookup tables
