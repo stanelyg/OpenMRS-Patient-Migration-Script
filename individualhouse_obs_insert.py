@@ -125,7 +125,7 @@ def main():
         )
         AND EXISTS (
             SELECT 1 FROM tbl_m_demographics d 
-            WHERE d.client_id = h.client_id AND d.implementing_partner_id IN  IN (12,35)
+            WHERE d.client_id = h.client_id AND d.implementing_partner_id IN (12,35)
         )
     """)
     for row in cursor.fetchall():
