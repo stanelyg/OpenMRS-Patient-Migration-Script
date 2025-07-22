@@ -1,4 +1,5 @@
 #!/bin/bash
+python demographics_obs_insert.py
 python individualhouse_obs_insert.py
 python Edu_Employment.py
 python hiv_testing.py

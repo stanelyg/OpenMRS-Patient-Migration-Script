@@ -103,7 +103,7 @@ def main():
         AND EXISTS (
             SELECT 1 
             FROM tbl_m_demographics d 
-            WHERE d.client_id = rp.client_id AND d.implementing_partner_id  IN (12,35)
+            WHERE d.client_id = rp.client_id AND d.implementing_partner_id  IN (1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,36,38,40,41,42,43)
         )""")
     for row in cursor.fetchall():
         client_id = row["client_id"]       
