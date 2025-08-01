@@ -2,30 +2,31 @@ import mysql.connector
 import uuid
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
+import time
+import random
 
 # DB config
-DEST_DB_CONFIG = {
+DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
-
 }
 
+
+
 concept_map = {
-    "has_biological_children_id": {"concept_id": 1000806, "type": "coded"},
-    "no_of_biological_children": {"concept_id": 1000929, "type": "numeric"},
-    "currently_pregnant_id": {"concept_id": 1000807, "type": "coded"},
-    "current_anc_enrollment_id": {"concept_id": 1001721, "type": "coded"},
-    "anc_facility_name": {"concept_id": 1000809, "type": "text"},
-    "fp_methods_awareness_id": {"concept_id": 1000810, "type": "coded"},
-    "familyplanningmethod_id": {"concept_id": 1000817, "type": "coded"},
-    "known_fp_method_other": {"concept_id": 1001722, "type": "text"},
-    "currently_use_modern_fp_id": {"concept_id": 1000819, "type": "coded"},
-    "current_fp_method_id": {"concept_id": 1000820, "type": "coded"},
-    "current_fp_method_other": {"concept_id": 1001723, "type": "text"},
-    "reason_not_using_fp_id": {"concept_id": 1000822, "type": "coded"},
-    "reason_not_using_fp_other": {"concept_id": 1001724, "type": "text"}
+    "ever_tested_for_hiv_id": {"concept_id": 1000757, "type": "coded"},
+    "period_last_tested_id": {"concept_id": 1000761, "type": "coded"},
+    "last_test_result_id": {"concept_id": 1000763, "type": "coded"},
+    "ccc_no": {"concept_id": 162053, "type": "text"},
+    "enrolled_in_hiv_care_id": {"concept_id": 1000764, "type": "coded"},
+    "care_facility_enrolled": {"concept_id": 1001719, "type": "text"},
+    "reason_not_in_hiv_care_id": {"concept_id": 1000774, "type": "coded"},
+    "reason_not_in_hiv_care_other": {"concept_id": 1000775, "type": "text"},
+    "reasonnottestedforhiv_id": {"concept_id": 1000784, "type": "coded"},
+    "reason_never_tested_for_hiv_other": {"concept_id": 1000785, "type": "text"},
+    "knowledge_of_hiv_test_centres_id": {"concept_id": 1001720, "type": "coded"}
 }
 
 # Load ID-to-concept mappings from lookup tables
@@ -90,21 +91,23 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
     """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
 def main():
-    conn = mysql.connector.connect(**DEST_DB_CONFIG)
+    conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
+    # load mappings
     categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
-    not_using_fp_map = load_value_map(cursor, "DreamsApp_reasonnotusingfamilyplanning_mapping")
-    fp_method_map = load_value_map(cursor, "DreamsApp_familyplanningmethod_mapping")
-    cursor.execute(""" SELECT * FROM tbl_m_reprohealth rp  WHERE EXISTS (
-            SELECT 1 
-            FROM dreams_client_patient_mapping pm 
-            WHERE pm.client_id = rp.client_id
-        )
-        AND EXISTS (
-            SELECT 1 
-            FROM tbl_m_demographics d 
-            WHERE d.client_id = rp.client_id AND d.implementing_partner_id  IN (1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,36,38,40,41,42,43)
-        )""")
+    period_last_test_map = load_value_map(cursor, "DreamsApp_periodresponse_mapping")
+    hivtestresult_map = load_value_map(cursor, "DreamsApp_hivtestresultresponse_mapping")
+    reasonnotinhivcare_map = load_value_map(cursor, "DreamsApp_reasonnotinhivcare_mapping")
+    reasonnottestedforhiv_map = load_value_map(cursor, "DreamsApp_reasonnottestedforhiv_mapping")
+
+    cursor.execute(""" SELECT *  FROM tbl_m_hivtesting hv
+            WHERE EXISTS (
+                SELECT 1 FROM dreams_client_patient_mapping pm
+                WHERE pm.client_id = hv.client_id
+            )
+            AND EXISTS (
+                SELECT 1 FROM tbl_m_demographics d
+                WHERE d.client_id = hv.client_id AND d.implementing_partner_id =39 ) """)
     for row in cursor.fetchall():
         client_id = row["client_id"]       
         person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
@@ -114,24 +117,21 @@ def main():
         for field, config in concept_map.items():
             value = row.get(field) 
             if config["type"] == "coded":
-                if field in (
-                    "has_biological_children_id", "currently_pregnant_id", "current_anc_enrollment_id",
-                    "fp_methods_awareness_id", "currently_use_modern_fp_id"
-                ):
+                if field in ("ever_tested_for_hiv_id", "enrolled_in_hiv_care_id", "knowledge_of_hiv_test_centres_id"):
                     value = categorical_map.get(str(value))
-                elif field in ("familyplanningmethod_id", "current_fp_method_id"):
-                    value = fp_method_map.get(str(value))
-                elif field == "reason_not_using_fp_id":
-                    value = not_using_fp_map.get(str(value))
+                elif field == "period_last_tested_id":
+                    value = period_last_test_map.get(str(value))
+                elif field == "last_test_result_id":
+                    value = hivtestresult_map.get(str(value))
+                elif field == "reason_not_in_hiv_care_id":
+                    value = reasonnotinhivcare_map.get(str(value))
+                elif field == "reasonnottestedforhiv_id":
+                    value = reasonnottestedforhiv_map.get(str(value))
                 if value is None:
-                    continue
+                    continue   
             insert_obs(cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
     conn.commit()
     cursor.close()
-    print("Reproductive health obs migration complete.")  
+    print("HIV Testing Data successfully migrated to obs.")  
 if __name__ == "__main__":
     main()
-
-    
-
-

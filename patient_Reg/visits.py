@@ -7,13 +7,6 @@ import os
 # Load environment variables from .env file
 load_dotenv()
 
-# Source DB (client data)
-SOURCE_DB = {
-    'host': os.getenv('SOURCE_DB_HOST'),
-    'user': os.getenv('SOURCE_DB_USER'),
-    'password': os.getenv('SOURCE_DB_PASSWORD'),
-    'database': os.getenv('SOURCE_DB_NAME')
-}
 
 # Destination DB (OpenMRS)
 DEST_DB = {
@@ -24,17 +17,14 @@ DEST_DB = {
 }
 
 def create_visits_from_flat():
-    source_conn = mysql.connector.connect(**SOURCE_DB)
-    dest_conn = mysql.connector.connect(**DEST_DB)
-
-    src_cursor = source_conn.cursor(dictionary=True)
-    dest_cursor = dest_conn.cursor()
+    conn = mysql.connector.connect(**DEST_DB)
+    cursor = conn.cursor(dictionary=True)
 
     now = datetime.now()
 
     # Load visits from client_visits_flat which already has patient_id
-    src_cursor.execute("SELECT * FROM enrollement_visits_flat")
-    visits = src_cursor.fetchall()
+    cursor.execute("SELECT * FROM Nuru_visits_master where client_id=766959  limit 1")
+    visits = cursor.fetchall()
 
     for visit in visits:
         patient_id = visit.get('patient_id')
@@ -49,7 +39,7 @@ def create_visits_from_flat():
 
         uuid_val = str(uuid.uuid4())
 
-        dest_cursor.execute("""
+        cursor.execute("""
             INSERT INTO visit
             (patient_id, visit_type_id, date_started, date_stopped, location_id, creator, date_created, uuid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -63,21 +53,18 @@ def create_visits_from_flat():
             now,
             uuid_val
         ))
-        visit_id = dest_cursor.lastrowid
+        visit_id = cursor.lastrowid
 
         # Log into dreams_production.patient_visits_mapping
-        src_cursor.execute("""
-            INSERT INTO dreams_production.patient_visits_mapping (patient_id, visit_id)
+        cursor.execute("""
+            INSERT INTO Nuru_visits_mapping (patient_id, visit_id)
             VALUES (%s, %s)
         """, (patient_id, visit_id))
 
         print(f"Inserted visit: patient_id {patient_id}, visit_date {date_started}")
 
-    dest_conn.commit()
-    src_cursor.close()
-    dest_cursor.close()
-    source_conn.close()
-    dest_conn.close()
+    conn.commit()
+    cursor.close()
 
 if __name__ == "__main__":
     create_visits_from_flat()

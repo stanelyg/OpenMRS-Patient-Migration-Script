@@ -1,25 +1,33 @@
-import pandas as pd
 import mysql.connector
 import uuid
 from datetime import datetime
-from dotenv import load_dotenv
-import os
+from multiprocessing import Pool, cpu_count
+
+# DB config
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
+
+
+
 concept_map = {
-    "used_alcohol_last_12months_id": {"concept_id": 1000855, "type": "coded"},
-    "frequency_of_alcohol_last_12months_id": {"concept_id": 1000861, "type": "coded"},
-    "drug_abuse_last_12months_id": {"concept_id": 1000862, "type": "coded"},
-    "drug_id": {"concept_id": 1000868, "type": "coded"},
-    "drug_used_last_12months_other": {"concept_id": 1001727, "type": "text"},
-    "produced_alcohol_last_12months_id": {"concept_id": 1000870, "type": "coded"},
+    "has_biological_children_id": {"concept_id": 1000806, "type": "coded"},
+    "no_of_biological_children": {"concept_id": 1000929, "type": "numeric"},
+    "currently_pregnant_id": {"concept_id": 1000807, "type": "coded"},
+    "current_anc_enrollment_id": {"concept_id": 1001721, "type": "coded"},
+    "anc_facility_name": {"concept_id": 1000809, "type": "text"},
+    "fp_methods_awareness_id": {"concept_id": 1000810, "type": "coded"},
+    "familyplanningmethod_id": {"concept_id": 1000817, "type": "coded"},
+    "known_fp_method_other": {"concept_id": 1001722, "type": "text"},
+    "currently_use_modern_fp_id": {"concept_id": 1000819, "type": "coded"},
+    "current_fp_method_id": {"concept_id": 1000820, "type": "coded"},
+    "current_fp_method_other": {"concept_id": 1001723, "type": "text"},
+    "reason_not_using_fp_id": {"concept_id": 1000822, "type": "coded"},
+    "reason_not_using_fp_other": {"concept_id": 1001724, "type": "text"}
 }
-
-
 
 # Load ID-to-concept mappings from lookup tables
 def load_value_map(cursor, table_name):
@@ -50,14 +58,6 @@ def get_person_and_encounter(cursor,client_id):
     encounter_id = encounter_row['encounter_id']
     return patient_id, patient_id, encounter_id
 
-def cast_to_number(value):
-    try:
-        num = float(value)
-        if num.is_integer():
-            return int(num)
-        return num
-    except (ValueError, TypeError):
-        return value
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
     if value is None or value == "":
@@ -90,48 +90,49 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
-
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor(dictionary=True)    
-
+    cursor = conn.cursor(dictionary=True)
     categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
-    frequency_map = load_value_map(cursor, "DreamsApp_frequencyresponse_mapping")
-    drug_map = load_value_map(cursor, "DreamsApp_drug_mapping")
-
-    cursor.execute("""SELECT *  FROM tbl_m_druguse du
-            WHERE EXISTS (
-                SELECT 1 FROM dreams_client_patient_mapping pm
-                WHERE pm.client_id = du.client_id
-            )
-            AND EXISTS (
-                SELECT 1 FROM tbl_m_demographics d
-                WHERE d.client_id = du.client_id AND d.implementing_partner_id  IN (1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,36,38,40,41,42,43))""")
+    not_using_fp_map = load_value_map(cursor, "DreamsApp_reasonnotusingfamilyplanning_mapping")
+    fp_method_map = load_value_map(cursor, "DreamsApp_familyplanningmethod_mapping")
+    cursor.execute(""" SELECT * FROM tbl_m_reprohealth rp  WHERE EXISTS (
+            SELECT 1 
+            FROM dreams_client_patient_mapping pm 
+            WHERE pm.client_id = rp.client_id
+        )
+        AND EXISTS (
+            SELECT 1 
+            FROM tbl_m_demographics d 
+            WHERE d.client_id = rp.client_id AND d.implementing_partner_id  =39
+        ) """)
     for row in cursor.fetchall():
-        client_id = row["client_id"]
+        client_id = row["client_id"]       
         person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
-
         for field, config in concept_map.items():
             value = row.get(field) 
             if config["type"] == "coded":
-                if field == "used_alcohol_last_12months_id":
+                if field in (
+                    "has_biological_children_id", "currently_pregnant_id", "current_anc_enrollment_id",
+                    "fp_methods_awareness_id", "currently_use_modern_fp_id"
+                ):
                     value = categorical_map.get(str(value))
-                elif field == "frequency_of_alcohol_last_12months_id":
-                    value = frequency_map.get(str(value))
-                elif field == "drug_abuse_last_12months_id":
-                    value=categorical_map.get(str(value))
-                elif field == "produced_alcohol_last_12months_id":
-                    value=categorical_map.get(str(value))
-                elif field == "drug_id":
-                    value=drug_map.get(str(value))
-
-            insert_obs(cursor, person_id, encounter_id, config["concept_id"],value, config["type"], field)
+                elif field in ("familyplanningmethod_id", "current_fp_method_id"):
+                    value = fp_method_map.get(str(value))
+                elif field == "reason_not_using_fp_id":
+                    value = not_using_fp_map.get(str(value))
+                if value is None:
+                    continue
+            insert_obs(cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
     conn.commit()
-    cursor.close()  
-    print(" Drug data successfully migrated to obs.")
-
+    cursor.close()
+    print("Reproductive health obs migration complete.")  
 if __name__ == "__main__":
     main()
+
+    
+
+

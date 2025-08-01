@@ -5,10 +5,11 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 
-DEST_DB_CONFIG = {
+
+DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
 
@@ -100,7 +101,7 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
 
 
 def main():
-    conn = mysql.connector.connect(**DEST_DB_CONFIG)
+    conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
     current_school_type_map = load_value_map(cursor, "DreamsApp_schooltype_mapping")
     categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
@@ -115,11 +116,11 @@ def main():
     cursor.execute(""" SELECT * FROM tbl_m_edu_empl ed
                         WHERE EXISTS (
                             SELECT 1 FROM tbl_m_demographics d
-                            WHERE d.client_id = ed.client_id AND d.implementing_partner_id IN (1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,36,38,40,41,42,43)
+                            WHERE d.client_id = ed.client_id AND d.implementing_partner_id =39
                         )
                         AND EXISTS (
                             SELECT 1 FROM dreams_client_patient_mapping pm
-                            WHERE  pm.client_id = ed.client_id)""")
+                            WHERE  pm.client_id = ed.client_id) """)
     for row in cursor.fetchall():
         client_id = row["client_id"]       
         person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))

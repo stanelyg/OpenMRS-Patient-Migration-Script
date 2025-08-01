@@ -4,33 +4,22 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 import os
-
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
-
 concept_map = {
-    "ever_had_sex_id": {"concept_id": 1000645, "type": "coded"},
-    "age_at_first_sexual_encounter": {"concept_id": 1000787, "type": "numeric"},
-    "has_sexual_partner_id": {"concept_id": 1000788, "type": "coded"},
-    "sex_partners_in_last_12months": {"concept_id": 1000792, "type": "numeric"},
-    "age_of_last_partner_id": {"concept_id": 1000792, "type": "coded"},
-    "age_of_second_last_partner_id": {"concept_id": 1000793, "type": "coded"},
-    "age_of_third_last_partner_id": {"concept_id": 1000794, "type": "coded"},
-    "last_partner_circumcised_id": {"concept_id": 1000795, "type": "coded"},
-    "second_last_partner_circumcised_id": {"concept_id": 1000796, "type": "coded"},
-    "third_last_partner_circumcised_id": {"concept_id": 1000797, "type": "coded"},
-    "know_last_partner_hiv_status_id": {"concept_id": 1000798, "type": "coded"},
-    "know_second_last_partner_hiv_status_id": {"concept_id": 1000800, "type": "coded"},
-    "know_third_last_partner_hiv_status_id": {"concept_id": 1000801, "type": "coded"},
-    "used_condom_with_last_partner_id": {"concept_id": 1000802, "type": "coded"},
-    "used_condom_with_second_last_partner_id": {"concept_id": 1000803, "type": "coded"},
-    "used_condom_with_third_last_partner_id": {"concept_id": 1000804, "type": "coded"},
-    "received_money_gift_for_sex_id": {"concept_id": 1000805, "type": "coded"}
+    "used_alcohol_last_12months_id": {"concept_id": 1000855, "type": "coded"},
+    "frequency_of_alcohol_last_12months_id": {"concept_id": 1000861, "type": "coded"},
+    "drug_abuse_last_12months_id": {"concept_id": 1000862, "type": "coded"},
+    "drug_id": {"concept_id": 1000868, "type": "coded"},
+    "drug_used_last_12months_other": {"concept_id": 1001727, "type": "text"},
+    "produced_alcohol_last_12months_id": {"concept_id": 1000870, "type": "coded"},
 }
+
+
 
 # Load ID-to-concept mappings from lookup tables
 def load_value_map(cursor, table_name):
@@ -60,6 +49,15 @@ def get_person_and_encounter(cursor,client_id):
 
     encounter_id = encounter_row['encounter_id']
     return patient_id, patient_id, encounter_id
+
+def cast_to_number(value):
+    try:
+        num = float(value)
+        if num.is_integer():
+            return int(num)
+        return num
+    except (ValueError, TypeError):
+        return value
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
     if value is None or value == "":
@@ -95,21 +93,20 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
 
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor(dictionary=True)
-   
+    cursor = conn.cursor(dictionary=True)    
+
     categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
-    partner_age_map = load_value_map(cursor, "DreamsApp_ageofsexualpartner_mapping")
     frequency_map = load_value_map(cursor, "DreamsApp_frequencyresponse_mapping")
- 
-    cursor.execute("""SELECT *  FROM tbl_m_sexualactivity sxa
+    drug_map = load_value_map(cursor, "DreamsApp_drug_mapping")
+
+    cursor.execute("""SELECT *  FROM tbl_m_druguse du
             WHERE EXISTS (
                 SELECT 1 FROM dreams_client_patient_mapping pm
-                WHERE pm.client_id = sxa.client_id
+                WHERE pm.client_id = du.client_id
             )
             AND EXISTS (
                 SELECT 1 FROM tbl_m_demographics d
-                WHERE d.client_id = sxa.client_id AND d.implementing_partner_id  IN (1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,36,38,40,41,42,43)) 
-    """)
+                WHERE d.client_id = du.client_id AND d.implementing_partner_id  =39) """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
@@ -120,28 +117,21 @@ def main():
         for field, config in concept_map.items():
             value = row.get(field) 
             if config["type"] == "coded":
-                if field in (
-                    "ever_had_sex_id", "has_sexual_partner_id",
-                    "last_partner_circumcised_id", "second_last_partner_circumcised_id",
-                    "third_last_partner_circumcised_id", "know_last_partner_hiv_status_id",
-                    "know_second_last_partner_hiv_status_id", "know_third_last_partner_hiv_status_id",
-                    "received_money_gift_for_sex_id"):
+                if field == "used_alcohol_last_12months_id":
                     value = categorical_map.get(str(value))
-                elif field in (
-                    "age_of_last_partner_id", "age_of_second_last_partner_id", "age_of_third_last_partner_id"):
-                    value = partner_age_map.get(str(value))
-                elif field in (
-                    "used_condom_with_last_partner_id", "used_condom_with_second_last_partner_id",
-                    "used_condom_with_third_last_partner_id"):
+                elif field == "frequency_of_alcohol_last_12months_id":
                     value = frequency_map.get(str(value))
-                if value is None:
-                    continue
-
+                elif field == "drug_abuse_last_12months_id":
+                    value=categorical_map.get(str(value))
+                elif field == "produced_alcohol_last_12months_id":
+                    value=categorical_map.get(str(value))
+                elif field == "drug_id":
+                    value=drug_map.get(str(value))
 
             insert_obs(cursor, person_id, encounter_id, config["concept_id"],value, config["type"], field)
     conn.commit()
-    cursor.close()
-    print("Sexual Activityv data successfully migrated to obs.")
+    cursor.close()  
+    print(" Drug data successfully migrated to obs.")
 
 if __name__ == "__main__":
     main()

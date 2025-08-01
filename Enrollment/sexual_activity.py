@@ -1,31 +1,37 @@
+import pandas as pd
 import mysql.connector
 import uuid
 from datetime import datetime
-from multiprocessing import Pool, cpu_count
-import time
-import random
+from dotenv import load_dotenv
+import os
 
-# DB config
-DEST_DB_CONFIG = {
+DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password':'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
 
 
+
 concept_map = {
-    "ever_tested_for_hiv_id": {"concept_id": 1000757, "type": "coded"},
-    "period_last_tested_id": {"concept_id": 1000761, "type": "coded"},
-    "last_test_result_id": {"concept_id": 1000763, "type": "coded"},
-    "ccc_no": {"concept_id": 162053, "type": "text"},
-    "enrolled_in_hiv_care_id": {"concept_id": 1000764, "type": "coded"},
-    "care_facility_enrolled": {"concept_id": 1001719, "type": "text"},
-    "reason_not_in_hiv_care_id": {"concept_id": 1000774, "type": "coded"},
-    "reason_not_in_hiv_care_other": {"concept_id": 1000775, "type": "text"},
-    "reasonnottestedforhiv_id": {"concept_id": 1000784, "type": "coded"},
-    "reason_never_tested_for_hiv_other": {"concept_id": 1000785, "type": "text"},
-    "knowledge_of_hiv_test_centres_id": {"concept_id": 1001720, "type": "coded"}
+    "ever_had_sex_id": {"concept_id": 1000645, "type": "coded"},
+    "age_at_first_sexual_encounter": {"concept_id": 1000787, "type": "numeric"},
+    "has_sexual_partner_id": {"concept_id": 1000788, "type": "coded"},
+    "sex_partners_in_last_12months": {"concept_id": 1000792, "type": "numeric"},
+    "age_of_last_partner_id": {"concept_id": 1000792, "type": "coded"},
+    "age_of_second_last_partner_id": {"concept_id": 1000793, "type": "coded"},
+    "age_of_third_last_partner_id": {"concept_id": 1000794, "type": "coded"},
+    "last_partner_circumcised_id": {"concept_id": 1000795, "type": "coded"},
+    "second_last_partner_circumcised_id": {"concept_id": 1000796, "type": "coded"},
+    "third_last_partner_circumcised_id": {"concept_id": 1000797, "type": "coded"},
+    "know_last_partner_hiv_status_id": {"concept_id": 1000798, "type": "coded"},
+    "know_second_last_partner_hiv_status_id": {"concept_id": 1000800, "type": "coded"},
+    "know_third_last_partner_hiv_status_id": {"concept_id": 1000801, "type": "coded"},
+    "used_condom_with_last_partner_id": {"concept_id": 1000802, "type": "coded"},
+    "used_condom_with_second_last_partner_id": {"concept_id": 1000803, "type": "coded"},
+    "used_condom_with_third_last_partner_id": {"concept_id": 1000804, "type": "coded"},
+    "received_money_gift_for_sex_id": {"concept_id": 1000805, "type": "coded"}
 }
 
 # Load ID-to-concept mappings from lookup tables
@@ -56,7 +62,6 @@ def get_person_and_encounter(cursor,client_id):
 
     encounter_id = encounter_row['encounter_id']
     return patient_id, patient_id, encounter_id
-
 
 def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name):
     if value is None or value == "":
@@ -89,48 +94,56 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
-def main():
-    conn = mysql.connector.connect(**DEST_DB_CONFIG)
-    cursor = conn.cursor(dictionary=True)
-    # load mappings
-    categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
-    period_last_test_map = load_value_map(cursor, "DreamsApp_periodresponse_mapping")
-    hivtestresult_map = load_value_map(cursor, "DreamsApp_hivtestresultresponse_mapping")
-    reasonnotinhivcare_map = load_value_map(cursor, "DreamsApp_reasonnotinhivcare_mapping")
-    reasonnottestedforhiv_map = load_value_map(cursor, "DreamsApp_reasonnottestedforhiv_mapping")
 
-    cursor.execute(""" SELECT *  FROM tbl_m_hivtesting hv
+def main():
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
+   
+    categorical_map = load_value_map(cursor, "DreamsApp_categoricalresponse_mapping")
+    partner_age_map = load_value_map(cursor, "DreamsApp_ageofsexualpartner_mapping")
+    frequency_map = load_value_map(cursor, "DreamsApp_frequencyresponse_mapping")
+ 
+    cursor.execute("""SELECT *  FROM tbl_m_sexualactivity sxa
             WHERE EXISTS (
                 SELECT 1 FROM dreams_client_patient_mapping pm
-                WHERE pm.client_id = hv.client_id
+                WHERE pm.client_id = sxa.client_id
             )
             AND EXISTS (
                 SELECT 1 FROM tbl_m_demographics d
-                WHERE d.client_id = hv.client_id AND d.implementing_partner_id  IN (1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,36,38,40,41,42,43))""")
+                WHERE d.client_id = sxa.client_id AND d.implementing_partner_id  =39)  
+    """)
     for row in cursor.fetchall():
-        client_id = row["client_id"]       
+        client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))
         if not person_id or not encounter_id:
             print(f"Skipping client_id {client_id} - missing person or encounter")
             continue
+
         for field, config in concept_map.items():
             value = row.get(field) 
             if config["type"] == "coded":
-                if field in ("ever_tested_for_hiv_id", "enrolled_in_hiv_care_id", "knowledge_of_hiv_test_centres_id"):
+                if field in (
+                    "ever_had_sex_id", "has_sexual_partner_id",
+                    "last_partner_circumcised_id", "second_last_partner_circumcised_id",
+                    "third_last_partner_circumcised_id", "know_last_partner_hiv_status_id",
+                    "know_second_last_partner_hiv_status_id", "know_third_last_partner_hiv_status_id",
+                    "received_money_gift_for_sex_id"):
                     value = categorical_map.get(str(value))
-                elif field == "period_last_tested_id":
-                    value = period_last_test_map.get(str(value))
-                elif field == "last_test_result_id":
-                    value = hivtestresult_map.get(str(value))
-                elif field == "reason_not_in_hiv_care_id":
-                    value = reasonnotinhivcare_map.get(str(value))
-                elif field == "reasonnottestedforhiv_id":
-                    value = reasonnottestedforhiv_map.get(str(value))
+                elif field in (
+                    "age_of_last_partner_id", "age_of_second_last_partner_id", "age_of_third_last_partner_id"):
+                    value = partner_age_map.get(str(value))
+                elif field in (
+                    "used_condom_with_last_partner_id", "used_condom_with_second_last_partner_id",
+                    "used_condom_with_third_last_partner_id"):
+                    value = frequency_map.get(str(value))
                 if value is None:
-                    continue   
-            insert_obs(cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field)
+                    continue
+
+
+            insert_obs(cursor, person_id, encounter_id, config["concept_id"],value, config["type"], field)
     conn.commit()
     cursor.close()
-    print("HIV Testing Data successfully migrated to obs.")  
+    print("Sexual Activityv data successfully migrated to obs.")
+
 if __name__ == "__main__":
     main()

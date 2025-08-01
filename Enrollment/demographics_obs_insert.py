@@ -7,8 +7,8 @@ import os
 
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'root',
-    'password': 'test',
+    'user': 'henryg',
+    'password': 'P@ssw0rd@1234',
     'database': 'openmrs'
 }
 
@@ -126,7 +126,7 @@ def main():
         SELECT *
             FROM tbl_m_demographics d
             INNER JOIN dreams_client_patient_mapping pm ON d.client_id = pm.client_id
-            WHERE d.implementing_partner_id IN (1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,36,38,40,41,42,43)
+            WHERE d.implementing_partner_id =39 
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]       
