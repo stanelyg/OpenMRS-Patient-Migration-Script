@@ -79,7 +79,7 @@ def main():
     cursor.execute("""
         SELECT m.* FROM tbl_behavioural_interven m
         INNER JOIN dreams_client_patient_mapping cp ON cp.client_id = m.client_id
-        INNER JOIN Nuru_visits_mapping vp ON vp.patient_id = cp.patient_id
+        INNER JOIN dreams_patient_visits_mapping vp ON vp.patient_id = cp.patient_id
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
