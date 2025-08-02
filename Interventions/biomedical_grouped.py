@@ -85,8 +85,7 @@ def main():
         SELECT m.* FROM tbl_biomedical_interven m
         INNER JOIN dreams_client_patient_mapping cp ON cp.client_id = m.client_id
         INNER JOIN dreams_patient_visits_mapping vp ON vp.patient_id = cp.patient_id
-        INNER JOIN tbl_m_demographics dm on dm.client_id=cp.client_id
-        where dm.implementing_partner_id=39
+        where m.implementing_partner_id=39
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
