@@ -6,19 +6,22 @@ from datetime import datetime
 
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 }
 
 concept_map = {
-    "intervention_type_id": {"concept_id": 1000880, "type": "coded"},
     "intervention_date": {"concept_id": 1000884, "type": "date"},
+    "intervention_type_id": {"concept_id": 1000880, "type": "coded"},
+    "hts_result_id": {"concept_id": 1001776, "type": "coded"},
+    "pregnancy_test_result_id": {"concept_id": 1001779, "type": "coded"},
+    "client_ccc_number": {"concept_id": 1001780, "type": "text"},
     "comment": {"concept_id": 1000653, "type": "text"},
-    "other_specify": {"concept_id": 1001774, "type": "text"}
+    "other_specify": {"concept_id": 1001781, "type": "text"}
 }
 
-group_concept_id = 1001775  
+group_concept_id = 1001782  
 
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
@@ -30,7 +33,7 @@ def get_person_and_encounter(cursor, client_id):
     if not row:
         return None, None, None
     patient_id = row['patient_id']
-    cursor.execute("SELECT encounter_id FROM service_uptake_encounter_mapping WHERE patient_id = %s", (patient_id,))
+    cursor.execute("SELECT encounter_id FROM biomedical_encounter_mapping WHERE patient_id = %s", (patient_id,))
     encounter_row = cursor.fetchone()
     if not encounter_row:
         return patient_id, patient_id, None
@@ -67,7 +70,7 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, f
 
     obs_id = cursor.lastrowid
     cursor.execute("""
-        INSERT INTO obs_behavioural_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
+        INSERT INTO obs_biomedical_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
@@ -75,9 +78,11 @@ def main():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
     interventiontype_map = load_value_map(cursor, "dreamsapp_interventiontype")
+    hts_map=load_value_map(cursor, "DreamsApp_hivtestresultresponse_mapping")
+    preg_result_map=load_value_map(cursor, "DreamsApp_pregnancytestresult_mapping")
 
     cursor.execute("""
-        SELECT m.* FROM tbl_behavioural_interven m
+        SELECT m.* FROM tbl_biomedical_interven m
         INNER JOIN dreams_client_patient_mapping cp ON cp.client_id = m.client_id
         INNER JOIN dreams_patient_visits_mapping vp ON vp.patient_id = cp.patient_id
         INNER JOIN tbl_m_demographics dm on dm.client_id=cp.client_id
@@ -94,13 +99,18 @@ def main():
 
         for field, config in concept_map.items():
             value = row.get(field)
-            if config["type"] == "coded" and field == "intervention_type_id":
-                value = interventiontype_map.get(str(value))
+            if config["type"] == "coded":
+                if field == "intervention_type_id":
+                    value = interventiontype_map.get(str(value))
+                elif field == "hts_result_id":
+                        value=hts_map.get(str(value))
+                elif field == "pregnancy_test_result_id":
+                    value=preg_result_map.get(str(value))
             insert_obs(cursor, person_id, encounter_id, config["concept_id"], value, config["type"], field, obs_group_id)
 
     conn.commit()
     cursor.close()
-    print("behavioural data successfully migrated")
+    print("BioMedical data successfully migrated")
 
 if __name__ == "__main__":
     main()
