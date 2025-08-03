@@ -14,37 +14,13 @@ MAX_PROCESSES = 3
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
-CONCEPT_IDS = [
-    1354, 159635, 162053, 164951, 166091, 167131, 1000636, 1000645, 1000658,
-    1000659, 1000660, 1000661, 1000662, 1000663, 1000664, 1000665, 1000667,
-    1000668, 1000669, 1000670, 1000671, 1000672, 1000673, 1000674, 1000675,
-    1000677, 1000679, 1000680, 1000685, 1000686, 1000691, 1000692, 1000698,
-    1000699, 1000700, 1000705, 1000706, 1000707, 1000708, 1000709, 1000710,
-    1000711, 1000712, 1000715, 1000720, 1000735, 1000737, 1000743, 1000744,
-    1000745, 1000750, 1000752, 1000756, 1000757, 1000761, 1000763, 1000764,
-    1000774, 1000775, 1000784, 1000785, 1000787, 1000788, 1000792, 1000793,
-    1000794, 1000795, 1000796, 1000797, 1000798, 1000800, 1000801, 1000802,
-    1000803, 1000804, 1000805, 1000806, 1000807, 1000809, 1000810, 1000817,
-    1000819, 1000820, 1000822, 1000824, 1000825, 1000826, 1000827, 1000828,
-    1000832, 1000833, 1000834, 1000835, 1000836, 1000837, 1000838, 1000839,
-    1000840, 1000841, 1000842, 1000843, 1000852, 1000854, 1000855, 1000861,
-    1000862, 1000868, 1000870, 1000878, 1001091, 1001343, 1001707, 1001708,
-    1001709, 1001711, 1001712, 1001713, 1001714, 1001715, 1001716, 1001717,
-    1001718, 1001719, 1001720, 1001721, 1001722, 1001723, 1001724, 1001725,
-    1001726, 1001727, 1001728, 1001770, 1001771
-]
-
 def get_obs_ids_to_delete():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
-    placeholders = ','.join(['%s'] * len(CONCEPT_IDS))
-    query = f"""
-        SELECT obs_id FROM obs 
-        WHERE concept_id IN ({placeholders}) 
-        AND YEAR(date_created) = 2025
+    cursor.execute("""
+        SELECT obs_id FROM obs_biomedical_migration_log
         ORDER BY obs_id
-    """
-    cursor.execute(query, CONCEPT_IDS)
+    """)
     obs_ids = [row[0] for row in cursor.fetchall()]
     cursor.close()
     conn.close()
@@ -63,14 +39,23 @@ def delete_obs_in_batches(obs_ids_partition, process_num):
             cursor = conn.cursor()
             try:
                 cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
-                placeholders = ','.join(['%s'] * len(batch))
-                query = f"DELETE FROM obs WHERE obs_id IN ({placeholders})"
-                cursor.execute(query, batch)
+                cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_obs_ids")
+                cursor.execute("CREATE TEMPORARY TABLE temp_obs_ids (obs_id INT PRIMARY KEY)")
+                cursor.executemany("INSERT INTO temp_obs_ids (obs_id) VALUES (%s)", [(obs_id,) for obs_id in batch])
+
+                cursor.execute("""
+                    DELETE m FROM obs m
+                    JOIN temp_obs_ids t ON m.obs_id = t.obs_id
+                """)
+                cursor.execute("""
+                    DELETE lg FROM obs_biomedical_migration_log lg
+                    JOIN temp_obs_ids t ON lg.obs_id = t.obs_id
+                """)
                 conn.commit()
                 print(f"[Process {process_num} - Batch {batch_index // BATCH_SIZE + 1}] Deleted {len(batch)} obs records")
                 break
             except mysql.connector.Error as e:
-                if e.errno == 1205:  # Lock timeout
+                if e.errno == 1205:
                     attempt += 1
                     print(f"[Process {process_num} - Batch {batch_index // BATCH_SIZE + 1}] Lock timeout. Retry {attempt}/{MAX_RETRIES} in {RETRY_DELAY}s...")
                     time.sleep(RETRY_DELAY)

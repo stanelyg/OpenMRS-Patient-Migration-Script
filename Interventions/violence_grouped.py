@@ -18,7 +18,7 @@ concept_map = {
     "other_specify": {"concept_id": 1001774, "type": "text"}
 }
 
-group_concept_id = 1001775  
+group_concept_id = 1001785  
 
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
