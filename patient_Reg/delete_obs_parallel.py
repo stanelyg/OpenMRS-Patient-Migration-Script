@@ -18,7 +18,7 @@ def get_obs_ids_to_delete():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT obs_id FROM obs WHERE  concept_id IN (1001782,1001775)
+        SELECT obs_id FROM temp_clean_obs
         ORDER BY obs_id
     """)
     obs_ids = [row[0] for row in cursor.fetchall()]
