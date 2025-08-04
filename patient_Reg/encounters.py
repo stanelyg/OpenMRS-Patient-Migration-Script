@@ -77,7 +77,7 @@ def insert_encounters():
 
         # Log into dreams_production.`service_uptake_encounter_mapping`
         cursor.execute("""
-            INSERT INTO behavioural_encounter_mapping2 (patient_id, encounter_id)
+            INSERT INTO biomedical_encounter_mapping2 (patient_id, encounter_id)
             VALUES (%s, %s)
         """, (patient_id, encounter_id))
 

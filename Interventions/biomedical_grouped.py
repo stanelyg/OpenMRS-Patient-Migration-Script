@@ -33,7 +33,7 @@ def get_person_and_encounter(cursor, client_id):
     if not row:
         return None, None, None
     patient_id = row['patient_id']
-    cursor.execute("SELECT encounter_id FROM behavioural_encounter_mapping2 WHERE patient_id = %s", (patient_id,))
+    cursor.execute("SELECT encounter_id FROM biomedical_encounter_mapping2 WHERE patient_id = %s", (patient_id,))
     encounter_row = cursor.fetchone()
     if not encounter_row:
         return patient_id, patient_id, None
