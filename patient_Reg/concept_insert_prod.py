@@ -53,10 +53,10 @@ def insert_concept(cursor, source_id, name):
     """, (desc_uuid, concept_id, DESCRIPTION, LOCALE, CREATOR_ID, now))
 
     # Log in mapping table
-    cursor.execute("""
-        INSERT INTO bio_medical_concept_migration_map (source_id, concept_id)
-        VALUES (%s, %s)
-    """, (source_id, concept_id))
+    # cursor.execute("""
+    #     INSERT INTO bio_medical_concept_migration_map (source_id, concept_id)
+    #     VALUES (%s, %s)
+    # """, (source_id, concept_id))
 
      # 🆕 Update the dreamsapp_interventiontype table with the new concept_id
     cursor.execute("""
