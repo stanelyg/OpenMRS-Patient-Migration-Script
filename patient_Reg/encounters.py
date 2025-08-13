@@ -33,7 +33,7 @@ def insert_encounters():
     cursor.execute("""
     SELECT m.patient_id,m.visit_id,v.date_started FROM dreams_patient_visits_mapping m 
     INNER JOIN visit v ON v.visit_id=m.visit_id
-                   INNER JOIN patient_encounter_lookup ek on ek.patient_id=m.patient_id 
+    INNER JOIN patient_encounter_lookup ek on ek.patient_id=m.patient_id 
         """)
     records =cursor.fetchall()
 
@@ -78,9 +78,9 @@ def insert_encounters():
 
         # Log into dreams_production.`service_uptake_encounter_mapping`
         cursor.execute("""
-            INSERT INTO other_intervention_encounter_mapping (patient_id, encounter_id)
+            INSERT INTO tools_encounter_mapping (patient_id, encounter_id,form_id)
             VALUES (%s, %s)
-        """, (patient_id, encounter_id))
+        """, (patient_id, encounter_id,form_id))
 
         print(f"Inserted encounter for patient {patient_id} linked to visit {encounter_id}")
 
