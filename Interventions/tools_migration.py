@@ -53,13 +53,13 @@ WHERE client_id = %s
 
 SQL_Q_CONCEPT = """
 SELECT CAST(concept_id AS UNSIGNED)
-FROM tools_questions
+FROM tbl_Questions_migration
 WHERE id = %s
 """
 
 SQL_A_CONCEPT = """
 SELECT concept_id
-FROM response_options
+FROM tbl_response_options
 WHERE id = %s
 """
 
