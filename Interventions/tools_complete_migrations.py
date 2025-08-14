@@ -34,16 +34,16 @@ DB = {
 # CONFIG
 # -----------------------
 SOURCE_TABLE        = "tbl_tools_data"      # has post_date, client_id, formcatalogue_id, text/option/question
-FORMCATALOGUE_ID    = 4                     # filter dataset; set to None to use all
+FORMCATALOGUE_ID    = 14                     # filter dataset; set to None to use all
 LOCATION_ID         = 1
 VISIT_TYPE_ID       = 1
-ENCOUNTER_TYPE_ID   = 519
-FORM_ID             = 553
+ENCOUNTER_TYPE_ID   = 471
+FORM_ID             = 554
 CREATOR_ID          = 1
 PROVIDER_ID         = 1        # set to None to skip encounter_provider
 ENCOUNTER_ROLE_ID   = 1        # required if PROVIDER_ID is set
 ENABLE_LOG          = True    # set True and adjust LOG_TABLE to log inserts
-LOG_TABLE           = "obs_hts_eligibilty_log"   # columns: (obs_id, person_id, encounter_id, concept_id, field_name, value, logged_at)
+LOG_TABLE           = "obs_STI_screening_log"   # columns: (obs_id, person_id, encounter_id, concept_id, field_name, value, logged_at)
 
 # -----------------------
 # SQL
