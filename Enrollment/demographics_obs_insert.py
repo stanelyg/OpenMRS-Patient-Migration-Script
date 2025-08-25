@@ -57,7 +57,7 @@ def get_person_and_encounter(cursor,client_id):
     patient_id = row['patient_id']
 
     cursor.execute("""
-        SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s
+        SELECT encounter_id FROM vuci_encounter_mapping WHERE patient_id = %s
     """, (patient_id,))
     encounter_row = cursor.fetchone()
 
@@ -124,9 +124,8 @@ def main():
     # Read source data
     cursor.execute("""
         SELECT *
-            FROM tbl_m_demographics d
+            FROM tbl_demographics_vuci d
             INNER JOIN dreams_client_patient_mapping pm ON d.client_id = pm.client_id
-            WHERE d.implementing_partner_id =39 
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]       

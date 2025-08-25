@@ -7,8 +7,8 @@ import os
 
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 }
 
@@ -54,7 +54,7 @@ def get_person_and_encounter(cursor,client_id):
     patient_id = row['patient_id']
 
     cursor.execute("""
-        SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s
+        SELECT encounter_id FROM vuci_encounter_mapping WHERE patient_id = %s
     """, (patient_id,))
     encounter_row = cursor.fetchone()
 
@@ -114,14 +114,14 @@ def main():
     frequency_map = load_value_map(cursor, "DreamsApp_frequencyresponse_mapping")
     gbvhelpprovider_map = load_value_map(cursor, "DreamsApp_gbvhelpprovider_mapping")
  
-    cursor.execute("""SELECT *  FROM tbl_m_violence vi
+    cursor.execute("""SELECT *  FROM tbl_violence_vuci vi
             WHERE EXISTS (
                 SELECT 1 FROM dreams_client_patient_mapping pm
                 WHERE pm.client_id = vi.client_id
             )
             AND EXISTS (
-                SELECT 1 FROM tbl_m_demographics d
-                WHERE d.client_id = vi.client_id AND d.implementing_partner_id =39) """)
+                SELECT 1 FROM tbl_demographics_vuci d
+                WHERE d.client_id = vi.client_id) """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
         person_id, patient_id, encounter_id = get_person_and_encounter(cursor, int(client_id))

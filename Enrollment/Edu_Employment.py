@@ -8,8 +8,8 @@ import os
 
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 }
 
@@ -56,7 +56,7 @@ def get_person_and_encounter(cursor,client_id):
     patient_id = row['patient_id']
 
     cursor.execute("""
-        SELECT encounter_id FROM patient_encounter_mapping WHERE patient_id = %s
+        SELECT encounter_id FROM vuci_encounter_mapping WHERE patient_id = %s
     """, (patient_id,))
     encounter_row = cursor.fetchone()
 
@@ -113,10 +113,10 @@ def main():
     periodresponse_map = load_value_map(cursor, "DreamsApp_periodresponse_mapping")
     lifewish_map = load_value_map(cursor, "DreamsApp_lifewish_mapping")   
 
-    cursor.execute(""" SELECT * FROM tbl_m_edu_empl ed
+    cursor.execute(""" SELECT * FROM tbl_eduempl_vuci ed
                         WHERE EXISTS (
-                            SELECT 1 FROM tbl_m_demographics d
-                            WHERE d.client_id = ed.client_id AND d.implementing_partner_id =39
+                            SELECT 1 FROM tbl_demographics_vuci d
+                            WHERE d.client_id = ed.client_id
                         )
                         AND EXISTS (
                             SELECT 1 FROM dreams_client_patient_mapping pm

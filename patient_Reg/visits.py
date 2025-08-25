@@ -23,7 +23,7 @@ def create_visits_from_flat():
     now = datetime.now()
 
     # Load visits from client_visits_flat which already has patient_id
-    cursor.execute("SELECT * FROM Nuru_visits_master where client_id=766959  limit 1")
+    cursor.execute("SELECT * FROM tbl_vuci_visits_dates")
     visits = cursor.fetchall()
 
     for visit in visits:
@@ -57,7 +57,7 @@ def create_visits_from_flat():
 
         # Log into dreams_production.patient_visits_mapping
         cursor.execute("""
-            INSERT INTO Nuru_visits_mapping (patient_id, visit_id)
+            INSERT INTO vuci_patient_visits_mapping (patient_id, visit_id)
             VALUES (%s, %s)
         """, (patient_id, visit_id))
 
