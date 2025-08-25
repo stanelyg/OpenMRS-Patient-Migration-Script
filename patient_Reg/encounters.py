@@ -78,7 +78,7 @@ def insert_encounters():
         # Log into dreams_production.`service_uptake_encounter_mapping`
         cursor.execute("""
             INSERT INTO vuci_encounter_mapping (patient_id, encounter_id,form_id)
-            VALUES (%s, %s)
+            VALUES (%s, %s,%s)
         """, (patient_id, encounter_id,form_id))
 
         print(f"Inserted encounter for patient {patient_id} linked to visit {encounter_id}")
