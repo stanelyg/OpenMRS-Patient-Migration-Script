@@ -6,8 +6,8 @@ import os
 
 DB_CONFIG = {
     'host': 'localhost',
-    'user': 'henryg',
-    'password': 'P@ssw0rd@1234',
+    'user': 'root',
+    'password': 'test',
     'database': 'openmrs'
 }
 
@@ -49,10 +49,14 @@ def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
     return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
 
-def fetch_scalar(cursor, sql, params):
-    cursor.execute(sql, params)
-    r = cursor.fetchone()
-    return r[0] if r else None
+def fetch_scalar(cur, sql, params):
+    cur.execute(sql, params)
+    r = cur.fetchone()
+    if not r:
+        return None
+    if isinstance(r, dict):        # dictionary cursor
+        return list(r.values())[0]
+    return r[0]         
 
 def ensure_visit(cursor, patient_id, visit_date):
     """Find (or create) one Visit per patient/date (by type + location)."""
