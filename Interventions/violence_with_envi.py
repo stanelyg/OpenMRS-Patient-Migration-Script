@@ -12,34 +12,40 @@ DB_CONFIG = {
 # ---- Config ----
 LOCATION_ID       = 1
 VISIT_TYPE_ID     = 1
-ENCOUNTER_TYPE_ID = 481
-FORM_ID           = 526
+ENCOUNTER_TYPE_ID = 482        # PVC encounter type (adjust as needed)
+FORM_ID           = 551        # PVC form id (adjust as needed)
 CREATOR_ID        = 1
 PROVIDER_ID       = 1
 ENCOUNTER_ROLE_ID = 1
 
 concept_map = {
-    "intervention_date":          {"concept_id": 1000884, "type": "date"},
-    "intervention_type_id":       {"concept_id": 1000880, "type": "coded"},
-    "hts_result_id":              {"concept_id": 1001776, "type": "coded"},
-    "pregnancy_test_result_id":   {"concept_id": 1001779, "type": "coded"},
-    "client_ccc_number":          {"concept_id": 1001780, "type": "text"},
-    "comment":                    {"concept_id": 1000653, "type": "text"},
-    "other_specify":              {"concept_id": 1001781, "type": "text"}
+    "intervention_date": {"concept_id": 1000884, "type": "date"},
+    "intervention_type_id": {"concept_id": 1000880, "type": "coded"},
+    "comment": {"concept_id": 1000653, "type": "text"},
+    "sexual_violence_others": {"concept_id": 1001790, "type": "text"},
+    "physical_violence_others": {"concept_id": 1001786, "type": "text"},
+    "emotional_violence_others": {"concept_id": 1001788, "type": "text"}
 }
 
-# ---------------- helpers ----------------
+# ------------------ helpers ------------------
 
 def to_datestr(v):
     if v is None or (isinstance(v, str) and not v.strip()):
         return datetime.today().strftime('%Y-%m-%d')
     if isinstance(v, (datetime, date)):
         return v.strftime('%Y-%m-%d')
-    return str(v)
+    return str(v).split(" ")[0]
 
 def load_value_map(cursor, table_name):
     cursor.execute(f"SELECT id, concept_id FROM {table_name}")
     return {str(row['id']): row['concept_id'] for row in cursor.fetchall()}
+
+def fetch_scalar(cur, sql, params):
+    cur.execute(sql, params)
+    r = cur.fetchone()
+    if not r:
+        return None
+    return list(r.values())[0] if isinstance(r, dict) else r[0]
 
 def get_patient_id(cursor, client_id):
     cursor.execute("SELECT patient_id FROM dreams_client_patient_mapping WHERE client_id=%s", (client_id,))
@@ -55,26 +61,24 @@ def ensure_visit(cursor, patient_id, visit_date):
     """, (patient_id, VISIT_TYPE_ID, LOCATION_ID, visit_date))
     row = cursor.fetchone()
     if row:
-        return row['visit_id']
+        return row['visit_id'] if isinstance(row, dict) else row[0]
     cursor.execute("""
       INSERT INTO visit (patient_id, visit_type_id, date_started, date_stopped, location_id,
                          creator, date_created, uuid, voided)
       VALUES (%s,%s,%s,%s,%s,%s,NOW(),%s,0)
-    """, (patient_id, VISIT_TYPE_ID, visit_date, visit_date,
-          LOCATION_ID, CREATOR_ID, str(uuid.uuid4())))
+    """, (patient_id, VISIT_TYPE_ID, visit_date, visit_date, LOCATION_ID,
+          CREATOR_ID, str(uuid.uuid4())))
     return cursor.lastrowid
 
 def ensure_encounter(cursor, patient_id, visit_id, enc_date):
     cursor.execute("""
       SELECT encounter_id FROM encounter
-      WHERE patient_id=%s AND visit_id=%s
-        AND encounter_type=%s AND form_id=%s
-        AND DATE(encounter_datetime)=DATE(%s)
+      WHERE patient_id=%s AND visit_id=%s AND encounter_type=%s AND form_id=%s
       LIMIT 1
-    """, (patient_id, visit_id, ENCOUNTER_TYPE_ID, FORM_ID, enc_date))
+    """, (patient_id, visit_id, ENCOUNTER_TYPE_ID, FORM_ID))
     row = cursor.fetchone()
     if row:
-        return row['encounter_id']
+        return row['encounter_id'] if isinstance(row, dict) else row[0]
     cursor.execute("""
       INSERT INTO encounter (encounter_datetime, patient_id, encounter_type, form_id,
                              visit_id, location_id, creator, date_created, uuid, voided)
@@ -99,8 +103,7 @@ def obs_exists(cursor, person_id, concept_id, encounter_id, value_field, value, 
     """, (person_id, concept_id, encounter_id, value, obs_date))
     return cursor.fetchone() is not None
 
-def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type,
-               field_name, obs_date):
+def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type, field_name, obs_date):
     if value in (None, ""):
         return
     field_map = {
@@ -112,7 +115,15 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type,
     value_field = field_map.get(value_type)
     if not value_field:
         return
-    # check duplicate
+    # normalize values
+    if value_type == "date":
+        value = to_datestr(value)
+    elif value_type == "numeric":
+        try:
+            value = float(value)
+        except Exception:
+            return
+    # duplicate check
     if obs_exists(cursor, person_id, concept_id, encounter_id, value_field, value, obs_date):
         print(f"Skipping duplicate obs for patient={person_id}, concept={concept_id}, value={value}")
         return
@@ -124,31 +135,33 @@ def insert_obs(cursor, person_id, encounter_id, concept_id, value, value_type,
     """, (obs_uuid, person_id, concept_id, encounter_id, obs_date,
           LOCATION_ID, value, CREATOR_ID))
     obs_id = cursor.lastrowid
+    # log
     cursor.execute("""
-        INSERT INTO obs_biomedical_migration_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
+        INSERT INTO obs_pvc_log (obs_id, person_id, encounter_id, concept_id, field_name, value)
         VALUES (%s,%s,%s,%s,%s,%s)
     """, (obs_id, person_id, encounter_id, concept_id, field_name, str(value)))
 
-# ---------------- main ----------------
+# ------------------ main ------------------
 
 def main():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(dictionary=True)
-
     interventiontype_map = load_value_map(cursor, "dreamsapp_interventiontype")
-    hts_map = load_value_map(cursor, "DreamsApp_hivtestresultresponse_mapping")
-    preg_map = load_value_map(cursor, "DreamsApp_pregnancytestresult_mapping")
 
     cursor.execute("""
-        SELECT m.* FROM tbl_biomedical_interven m
+        SELECT m.* FROM tbl_pvc_interventions m
         INNER JOIN dreams_client_patient_mapping cp ON cp.client_id = m.client_id
-        WHERE m.client_id =2689452
     """)
-    for row in cursor.fetchall():
+    rows = cursor.fetchall()
+
+    inserted_rows = 0
+    skipped_no_patient = 0
+
+    for row in rows:
         client_id = row["client_id"]
         patient_id = get_patient_id(cursor, int(client_id))
         if not patient_id:
-            print(f"Skipping client {client_id}: no patient_id")
+            skipped_no_patient += 1
             continue
 
         enc_date = to_datestr(row.get("intervention_date"))
@@ -157,19 +170,15 @@ def main():
 
         for field, cfg in concept_map.items():
             value = row.get(field)
-            if cfg["type"] == "coded":
-                if field == "intervention_type_id":
-                    value = interventiontype_map.get(str(value))
-                elif field == "hts_result_id":
-                    value = hts_map.get(str(value))
-                elif field == "pregnancy_test_result_id":
-                    value = preg_map.get(str(value))
+            if cfg["type"] == "coded" and field == "intervention_type_id":
+                value = interventiontype_map.get(str(value))
             insert_obs(cursor, patient_id, encounter_id, cfg["concept_id"],
                        value, cfg["type"], field, enc_date)
+            inserted_rows += 1
 
     conn.commit()
     cursor.close()
-    print("BioMedical data successfully migrated")
+    print(f"PVC data successfully migrated. Obs inserted: {inserted_rows}, skipped(no patient): {skipped_no_patient}")
 
 if __name__ == "__main__":
     main()
