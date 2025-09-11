@@ -142,7 +142,6 @@ def main():
     cursor.execute("""
         SELECT m.* FROM tbl_biomedical_interven m
         INNER JOIN dreams_client_patient_mapping cp ON cp.client_id = m.client_id
-        WHERE m.client_id =2689452
     """)
     for row in cursor.fetchall():
         client_id = row["client_id"]
