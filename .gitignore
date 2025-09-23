@@ -1,6 +1,5 @@
 .env
 venv
 *.csv
-*.sql
 *.zip
 csvs
